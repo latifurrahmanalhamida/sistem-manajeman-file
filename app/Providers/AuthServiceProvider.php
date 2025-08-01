@@ -13,7 +13,7 @@ class AuthServiceProvider extends ServiceProvider
      *
      * @var array<class-string, class-string>
      */
-    protected $policies = [
+    protected $policies = [ \App\Models\File::class => \App\Policies\FilePolicy::class,
         //
     ];
 
@@ -26,4 +26,5 @@ class AuthServiceProvider extends ServiceProvider
         // This is used in your api.php routes.
         Gate::define('superadmin', fn (User $user) => $user->role === 'superadmin');
     }
+    
 }

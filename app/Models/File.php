@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes; // <-- 1. Tambahkan ini
 
 class File extends Model
 {
-    // ... kode yang sudah ada ...
-    
-    // Tambahkan ini agar bisa diisi massal
+    use HasFactory, SoftDeletes; // <-- 2. Tambahkan ini
+
     protected $fillable = [
         'nama_file_asli',
         'nama_file_tersimpan',
@@ -18,20 +19,14 @@ class File extends Model
         'ukuran_file',
         'uploader_id',
         'division_id',
+        'is_favorited', // <-- 3. Tambahkan ini agar bisa diisi
     ];
 
-
-    /**
-     * Mendapatkan user yang mengunggah file.
-     */
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploader_id');
     }
 
-    /**
-     * Mendapatkan divisi dari file ini.
-     */
     public function division(): BelongsTo
     {
         return $this->belongsTo(Division::class);

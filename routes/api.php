@@ -25,11 +25,26 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
+
     // --- RUTE UNTUK MANAJEMEN FILE ---
     Route::get('/files', [FileController::class, 'index']);
     Route::post('/files', [FileController::class, 'store']);
-    Route::get('/files/{file}', [FileController::class, 'download']);
-    Route::delete('/files/{file}', [FileController::class, 'destroy']);
+    
+    // RUTE BARU UNTUK SIDEBAR
+    Route::get('/files/recent', [FileController::class, 'recent']);
+    Route::get('/files/favorites', [FileController::class, 'favorites']);
+    Route::get('/files/trashed', [FileController::class, 'trashed']);
+
+    // Rute per file
+    Route::prefix('files/{file}')->group(function() {
+        Route::get('/', [FileController::class, 'download']);
+        Route::delete('/', [FileController::class, 'destroy']); // Ini akan menjadi soft delete
+        
+        // RUTE BARU UNTUK AKSI
+        Route::post('/favorite', [FileController::class, 'toggleFavorite']);
+        Route::post('/restore', [FileController::class, 'restore']);
+        Route::delete('/force', [FileController::class, 'forceDelete']);
+    });
 
     
     // --- GRUP RUTE UNTUK ADMIN ---
