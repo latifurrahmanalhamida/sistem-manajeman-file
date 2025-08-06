@@ -7,6 +7,9 @@ use App\Models\File;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
 
 class FileController extends Controller
 {
@@ -40,7 +43,7 @@ class FileController extends Controller
         ]);
         return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);
     }
-    
+
     // --- FUNGSI BARU DIMULAI DARI SINI ---
 
     public function recent()
@@ -67,7 +70,7 @@ class FileController extends Controller
         }
         return $query->latest()->get();
     }
-    
+
     public function trashed()
     {
         $user = Auth::user();
@@ -79,7 +82,7 @@ class FileController extends Controller
         }
         return $query->latest()->get();
     }
-    
+
     public function toggleFavorite(File $file)
     {
         $this->authorize('update', $file); // Memastikan user punya akses ke file ini
@@ -87,7 +90,7 @@ class FileController extends Controller
         $file->save();
         return response()->json(['message' => 'Status favorit berhasil diubah.', 'file' => $file]);
     }
-    
+
     public function restore($fileId)
     {
         $file = File::onlyTrashed()->findOrFail($fileId);
@@ -105,15 +108,33 @@ class FileController extends Controller
         return response()->json(['message' => 'File berhasil dihapus permanen.']);
     }
 
+    // GANTI FUNGSI LAMA DENGAN YANG INI
     public function download(File $file)
     {
+        // Otorisasi: Pastikan pengguna punya hak akses
         $this->authorize('view', $file);
+
+        // Cek apakah file fisik ada di server
         if (!Storage::exists($file->path_penyimpanan)) {
             return response()->json(['message' => 'File tidak ditemukan di server.'], 404);
         }
+
+        // Logika Cerdas: Tentukan apakah file akan dipratinjau atau diunduh
+        $imageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $textMimeTypes = ['text/plain', 'application/pdf'];
+
+        // Jika file adalah gambar atau PDF, tampilkan di browser (pratinjau)
+        if (in_array($file->tipe_file, $imageMimeTypes) || in_array($file->tipe_file, $textMimeTypes)) {
+            // Storage::response() mengirim file dengan header 'inline'
+            return Storage::response($file->path_penyimpanan, $file->nama_file_asli);
+        }
+
+        // Untuk semua tipe file lainnya, paksa unduh
+        // Storage::download() mengirim file dengan header 'attachment'
         return Storage::download($file->path_penyimpanan, $file->nama_file_asli);
     }
-    
+
+
     // --- UBAH FUNGSI DESTROY ---
     public function destroy(File $file)
     {
@@ -121,4 +142,46 @@ class FileController extends Controller
         $file->delete(); // Ini akan melakukan soft delete, bukan hapus permanen
         return response()->json(['message' => 'File berhasil dipindahkan ke sampah.']);
     }
+
+   public function upload(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|max:10240', // max 10MB
+        ]);
+
+        $user = Auth::user();
+        $path = $request->file('file')->store('uploads/' . $user->division_id);
+
+        return response()->json([
+            'success' => true,
+            'path' => $path,
+            'url' => url('/api/files/preview/' . $path),
+        ]);
+    }
+
+    public function preview(File $file)
+{
+    // Verifikasi bahwa pengguna memiliki izin untuk melihat file ini
+    // (Contoh: pengguna berada di divisi yang sama dengan file)
+    if (auth()->user()->division_id !== $file->division_id && auth()->user()->role !== 'super_admin') {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+
+    $path = "uploads/{$file->division_id}/{$file->nama_file_tersimpan}";
+
+    if (!Storage::disk('local')->exists($path)) {
+        return response()->json(['message' => 'File not found'], 404);
+    }
+
+    $stream = Storage::disk('local')->readStream($path);
+
+    $headers = [
+        'Content-Type' => $file->tipe_file,
+        'Content-Disposition' => 'inline; filename="' . $file->nama_file_asli . '"',
+    ];
+
+    return new StreamedResponse(function() use ($stream) {
+        fpassthru($stream);
+    }, 200, $headers);
+}
 }
