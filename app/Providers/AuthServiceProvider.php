@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Models\File; // Tambahkan import untuk File
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use App\Policies\UserPolicy;
+use App\Policies\FilePolicy; // Tambahkan import untuk FilePolicy
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -13,8 +16,9 @@ class AuthServiceProvider extends ServiceProvider
      *
      * @var array<class-string, class-string>
      */
-    protected $policies = [ \App\Models\File::class => \App\Policies\FilePolicy::class,
-        //
+    protected $policies = [
+        File::class => FilePolicy::class,
+        User::class => UserPolicy::class, // <-- BARIS INI DITAMBAHKAN
     ];
 
     /**
@@ -22,9 +26,9 @@ class AuthServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Defines a 'superadmin' gate to check if a user has the 'superadmin' role.
-        // This is used in your api.php routes.
-        Gate::define('superadmin', fn (User $user) => $user->role === 'superadmin');
+        // Baris Gate::define di bawah ini tidak sepenuhnya benar
+        // karena $user->role adalah objek, bukan string.
+        // Sebaiknya periksa nama role seperti ini:
+        Gate::define('superadmin', fn (User $user) => $user->role->name === 'super_admin');
     }
-    
 }

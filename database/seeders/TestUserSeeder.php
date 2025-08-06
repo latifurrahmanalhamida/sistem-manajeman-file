@@ -26,7 +26,9 @@ class TestUserSeeder extends Seeder
             User::firstOrCreate(
                 ['email' => 'admin.keuangan@contoh.com'],
                 [
+                    'nipp' => '12345', 
                     'name' => 'Admin Keuangan',
+                    'username' => 'admin.keu',
                     'password' => Hash::make('password'),
                     'role_id' => $adminRole->id,
                     'division_id' => $financeDivision->id,
@@ -37,7 +39,9 @@ class TestUserSeeder extends Seeder
             User::firstOrCreate(
                 ['email' => 'user.keuangan@contoh.com'],
                 [
+                    'nipp' => '54321',
                     'name' => 'User Keuangan',
+                    'username' => 'user.keu',
                     'password' => Hash::make('password'),
                     'role_id' => $userRole->id,
                     'division_id' => $financeDivision->id,

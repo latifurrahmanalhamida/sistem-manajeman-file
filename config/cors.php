@@ -15,18 +15,11 @@ return [
     |
     */
 
-   // 'paths' => ['api/*', 'sanctum/csrf-cookie'],
-    // config/cors.php
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
+
     'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:3000')],
-    'supports_credentials' => true,
 
-
-    'allowed_methods' => ['*'],
-
-    'allowed_origins' => ['*'],
-
-    'allowed_origins_patterns' => [],
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
     'allowed_headers' => ['*'],
 
@@ -34,6 +27,6 @@ return [
 
     'max_age' => 0,
 
-   // 'supports_credentials' => false,
+    'supports_credentials' => true,
 
 ];
