@@ -36,7 +36,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // --- GRUP RUTE ADMIN (/api/admin/...) ---
     Route::prefix('admin')->group(function() {
-        
+
         // Rute yang bisa diakses Super Admin & Admin Devisi
         Route::middleware('check.role:super_admin,admin_devisi')->group(function () {
             Route::get('/users', [UserController::class, 'index']);
