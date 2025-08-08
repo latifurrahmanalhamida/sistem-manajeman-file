@@ -27,20 +27,52 @@ class FileController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate(['file' => 'required|file|max:10240']);
+        $request->validate([
+            'file' => 'required|file|max:10240', // max 10MB
+            'parent_id' => 'nullable|exists:files,id,deleted_at,NULL', // Memastikan parent_id ada dan bukan file yang terhapus
+        ]);
+
+        $uploadedFile = $request->file('file');
+        $originalName = $uploadedFile->getClientOriginalName();
         $user = Auth::user();
-        $file = $request->file('file');
-        $path = $file->store('uploads/' . $user->division_id);
+        $divisionId = $user->division_id;
+        $overwrite = $request->boolean('overwrite');
+
+        // Cek file berdasarkan nama asli dan ID divisi
+        $existingFile = File::where('nama_file_asli', $originalName)
+                            ->where('division_id', $divisionId)
+                            ->first();
+
+        if ($existingFile && !$overwrite) {
+            // Skenario 2: File ada, tapi belum ada konfirmasi.
+            return response()->json([
+                'message' => 'File dengan nama yang sama sudah ada di lokasi ini.',
+                'status' => 'conflict'
+            ], 409); // HTTP 409 Conflict
+        }
+
+        if ($existingFile && $overwrite) {
+            // Skenario 3: Pengguna setuju menimpa.
+            // Hapus file lama dari storage
+            Storage::delete($existingFile->path_penyimpanan);
+            // Hapus record lama dari database (force delete karena akan diganti)
+            $existingFile->forceDelete();
+        }
+
+        // Skenario 1 & 3: Simpan file baru.
+        $path = $uploadedFile->store('uploads/' . $divisionId);
 
         $newFile = File::create([
-            'nama_file_asli' => $file->getClientOriginalName(),
-            'nama_file_tersimpan' => $file->hashName(),
+            'nama_file_asli' => $originalName,
+            'nama_file_tersimpan' => $uploadedFile->hashName(),
             'path_penyimpanan' => $path,
-            'tipe_file' => $file->getClientMimeType(),
-            'ukuran_file' => $file->getSize(),
+            'tipe_file' => $uploadedFile->getClientMimeType(),
+            'ukuran_file' => $uploadedFile->getSize(),
             'uploader_id' => $user->id,
-            'division_id' => $user->division_id,
+            'division_id' => $divisionId,
+            // 'parent_id' akan ditambahkan jika Anda mengelola struktur folder
         ]);
+
         return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);
     }
 
