@@ -26,7 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/files/trashed', [FileController::class, 'trashed']);
 
     // Rute Aksi per File
-    Route::prefix('files/{file}')->group(function() {
+    Route::prefix('files/{fileId}')->group(function() {
         Route::get('/', [FileController::class, 'download']);
         Route::delete('/', [FileController::class, 'destroy']);
         Route::post('/favorite', [FileController::class, 'toggleFavorite']);
