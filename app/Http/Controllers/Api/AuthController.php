@@ -5,18 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash; // <-- Tambahkan ini
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use App\Models\User; // <-- Pastikan model User di-import
+use App\Models\User;
 
 class AuthController extends Controller
 {
     /**
-     * Menangani permintaan login user dengan pesan error spesifik.
+     * Menangani permintaan login.
      */
     public function login(Request $request)
     {
-        // 1. Validasi input dasar
         $validator = Validator::make($request->all(), [
             'login' => 'required|string',
             'password' => 'required|string',
@@ -27,56 +26,49 @@ class AuthController extends Controller
         }
 
         $loginInput = $request->input('login');
-        $password = $request->input('password');
-
-        // 2. Cari user berdasarkan email ATAU nipp
         $user = User::where('email', $loginInput)
                     ->orWhere('nipp', $loginInput)
                     ->first();
 
-        // 3. Jika user tidak ditemukan, kirim error spesifik
         if (!$user) {
-            return response()->json([
-                'message' => 'Email atau NIPP tidak terdaftar.'
-            ], 401);
+            return response()->json(['message' => 'Email atau NIPP tidak terdaftar.'], 401);
         }
 
-        // 4. Jika user ditemukan, cek password-nya
-        if (!Hash::check($password, $user->password)) {
-            return response()->json([
-                'message' => 'Password yang Anda masukkan salah.'
-            ], 401);
+        if (!Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Password yang Anda masukkan salah.'], 401);
         }
 
-        // 5. Jika semua cocok, login berhasil
         Auth::login($user);
-        return $this->sendLoginSuccessResponse();
+        return $this->sendLoginSuccessResponse($user);
     }
 
     /**
      * Helper function untuk mengirim response saat login berhasil.
      */
-    protected function sendLoginSuccessResponse()
+    protected function sendLoginSuccessResponse(User $user)
     {
-        $user = Auth::user();
         $token = $user->createToken('auth_token')->plainTextToken;
+        // Kita tidak perlu query lagi karena data user sudah lengkap
+        $user->load(['role', 'division']);
 
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role->name,
-                'division' => $user->division ? $user->division->name : null
-            ]
+            'user' => $user
         ]);
     }
 
+    /**
+     * Mengambil data user yang sedang terotentikasi.
+     * FUNGSI INI TELAH DIPERBAIKI.
+     */
     public function user(Request $request)
     {
-        return response()->json($request->user());
+        // Ambil user yang sedang login dan sertakan relasinya
+        $user = $request->user()->load(['role', 'division']);
+        
+        // Kirimkan kembali dengan format yang sama seperti saat login
+        return response()->json($user);
     }
 
     /**
@@ -85,9 +77,6 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
-
-        return response()->json([
-            'message' => 'Logout berhasil.'
-        ]);
+        return response()->json(['message' => 'Logout berhasil.']);
     }
 }
