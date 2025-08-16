@@ -5,18 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash; // <-- Tambahkan ini
 use Illuminate\Support\Facades\Validator;
+use App\Models\User; // <-- Pastikan model User di-import
 
 class AuthController extends Controller
 {
     /**
-     * Menangani permintaan login user.
+     * Menangani permintaan login user dengan pesan error spesifik.
      */
     public function login(Request $request)
     {
-        // Validasi input dari user
+        // 1. Validasi input dasar
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
+            'login' => 'required|string',
             'password' => 'required|string',
         ]);
 
@@ -24,20 +26,41 @@ class AuthController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        // Coba untuk melakukan otentikasi
-        if (!Auth::attempt($request->only('email', 'password'))) {
+        $loginInput = $request->input('login');
+        $password = $request->input('password');
+
+        // 2. Cari user berdasarkan email ATAU nipp
+        $user = User::where('email', $loginInput)
+                    ->orWhere('nipp', $loginInput)
+                    ->first();
+
+        // 3. Jika user tidak ditemukan, kirim error spesifik
+        if (!$user) {
             return response()->json([
-                'message' => 'Email atau Password salah.'
-            ], 401); // 401 artinya Unauthorized
+                'message' => 'Email atau NIPP tidak terdaftar.'
+            ], 401);
         }
 
-        // Jika berhasil, ambil data user
-        $user = $request->user();
+        // 4. Jika user ditemukan, cek password-nya
+        if (!Hash::check($password, $user->password)) {
+            return response()->json([
+                'message' => 'Password yang Anda masukkan salah.'
+            ], 401);
+        }
 
-        // Buat token API (menggunakan Sanctum)
+        // 5. Jika semua cocok, login berhasil
+        Auth::login($user);
+        return $this->sendLoginSuccessResponse();
+    }
+
+    /**
+     * Helper function untuk mengirim response saat login berhasil.
+     */
+    protected function sendLoginSuccessResponse()
+    {
+        $user = Auth::user();
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // Kirim response berisi token dan data user
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
@@ -45,15 +68,12 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'role' => $user->role->name, // Mengambil nama peran dari relasi
-                'division' => $user->division ? $user->division->name : null // Mengambil nama divisi jika ada
+                'role' => $user->role->name,
+                'division' => $user->division ? $user->division->name : null
             ]
         ]);
     }
 
-    /**
-     * Mendapatkan data user yang sedang login.
-     */
     public function user(Request $request)
     {
         return response()->json($request->user());
@@ -64,7 +84,6 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        // Hapus token otentikasi saat ini
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
