@@ -11,62 +11,89 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function index()
-    {
-        // 1. Ambil data summary cards
-        $totalFiles = File::count();
-        $totalUsers = User::count();
-        $totalDivisions = Division::count();
-        $storageUsedBytes = File::sum('ukuran_file'); // Dalam bytes
+public function index()
+{
+    // 1. Ambil data summary cards (Kode Anda yang sudah ada)
+    $totalFiles = File::count();
+    $totalUsers = User::count();
+    $totalDivisions = Division::count();
+    $storageUsedBytes = File::sum('ukuran_file');
 
-        // 2. Data untuk grafik upload harian (7 hari terakhir)
-        // Ambil data dari DB dan kelompokkan berdasarkan tanggal
-        $uploadsData = File::select(
-            DB::raw('DATE(created_at) as date'),
-            DB::raw('count(*) as count')
-        )
-        ->where('created_at', '>=', now()->subDays(6)) // 7 hari termasuk hari ini
-        ->groupBy('date')
-        ->orderBy('date', 'asc')
-        ->get()
-        ->keyBy('date'); // Jadikan tanggal sebagai key untuk pencarian mudah
+    // --- BAGIAN BARU: MENGAMBIL STATISTIK SERVER ---
+    // a. Statistik Disk / Penyimpanan Server
+    $diskTotalSpace = disk_total_space("/"); // Total space in bytes
+    $diskFreeSpace = disk_free_space("/");   // Free space in bytes
+    $diskUsedSpace = $diskTotalSpace - $diskFreeSpace;
+    $diskUsedPercentage = ($diskTotalSpace > 0) ? ($diskUsedSpace / $diskTotalSpace) * 100 : 0;
 
-        // Buat koleksi 7 tanggal terakhir untuk memastikan tidak ada hari yang terlewat
-        $dailyUploads = collect();
-        for ($i = 6; $i >= 0; $i--) {
-            $date = now()->subDays($i)->format('Y-m-d');
-            $dailyUploads->push([
-                'date' => $date,
-                'count' => $uploadsData->get($date)->count ?? 0, // Ambil count, atau 0 jika tidak ada
-            ]);
-        }
+    // b. Statistik RAM & CPU (Perintah ini umumnya untuk server Linux)
+    // PENTING: shell_exec() bisa dinonaktifkan oleh hosting karena alasan keamanan.
+    // Pastikan ini diizinkan di server kantor Anda.
+    $ramUsagePercentage = shell_exec("free | grep Mem | awk '{print $3/$2 * 100.0}'");
+    $cpuUsagePercentage = shell_exec("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'");
+    // --------------------------------------------------
 
-        // 3. Data untuk grafik distribusi file per divisi
-        $filesPerDivision = Division::withCount('files')
-            ->get()
-            ->map(fn ($division) => [
-                'name' => $division->name,
-                'count' => $division->files_count,
-            ]);
+    // 2. Data untuk grafik upload harian (Kode Anda yang sudah ada)
+    $uploadsData = File::select(
+        DB::raw('DATE(created_at) as date'),
+        DB::raw('count(*) as count')
+    )
+    ->where('created_at', '>=', now()->subDays(6))
+    ->groupBy('date')
+    ->orderBy('date', 'asc')
+    ->get()
+    ->keyBy('date');
 
-        // 4. Data untuk tabel aktivitas terbaru (5 file terakhir)
-        $recentUploads = File::with('uploader:id,name', 'division:id,name')
-            ->latest()
-            ->take(5)
-            ->get();
-
-        // Gabungkan semua data menjadi satu respons
-        return response()->json([
-            'totalFiles' => $totalFiles,
-            'totalUsers' => $totalUsers,
-            'totalDivisions' => $totalDivisions,
-            'storageUsed' => $this->formatBytes($storageUsedBytes),
-            'storageUsedBytes' => (int) $storageUsedBytes,
-            'dailyUploads' => $dailyUploads,
-            'filesPerDivision' => $filesPerDivision,
-            'recentUploads' => $recentUploads,
+    $dailyUploads = collect();
+    for ($i = 6; $i >= 0; $i--) {
+        $date = now()->subDays($i)->format('Y-m-d');
+        $dailyUploads->push([
+            'date' => $date,
+            'count' => $uploadsData->get($date)->count ?? 0,
         ]);
     }
+
+    // 3. Data untuk grafik distribusi file per divisi (Kode Anda yang sudah ada)
+    $filesPerDivision = Division::withCount('files')
+        ->get()
+        ->map(fn ($division) => [
+            'name' => $division->name,
+            'count' => $division->files_count,
+        ]);
+
+    // 4. Data untuk tabel aktivitas terbaru (Kode Anda yang sudah ada)
+    $recentUploads = File::with('uploader:id,name', 'division:id,name')
+        ->latest()
+        ->take(5)
+        ->get();
+
+    // Gabungkan semua data menjadi satu respons, TERMASUK DATA SERVER
+    return response()->json([
+        // Data Aplikasi
+        'totalFiles' => $totalFiles,
+        'totalUsers' => $totalUsers,
+        'totalDivisions' => $totalDivisions,
+        'storageUsed' => $this->formatBytes($storageUsedBytes),
+        'storageUsedBytes' => (int) $storageUsedBytes,
+        'dailyUploads' => $dailyUploads,
+        'filesPerDivision' => $filesPerDivision,
+        'recentUploads' => $recentUploads,
+
+        // Data Server Baru
+        'disk' => [
+            'total' => $this->formatBytes($diskTotalSpace),
+            'free' => $this->formatBytes($diskFreeSpace),
+            'used' => $this->formatBytes($diskUsedSpace),
+            'percentage' => round($diskUsedPercentage, 2)
+        ],
+        'ram' => [
+            'percentage' => round((float) $ramUsagePercentage, 2)
+        ],
+        'cpu' => [
+            'percentage' => round((float) $cpuUsagePercentage, 2)
+        ],
+    ]);
+}
 
     /**
      * Mengubah ukuran byte menjadi format yang mudah dibaca (KB, MB, GB, ...).
