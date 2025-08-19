@@ -8,7 +8,6 @@ use App\Models\User;
 use App\Models\Role;
 use App\Models\File;
 use App\Models\Division;
-// Import ActivityLog tidak lagi diperlukan di sini, karena sudah ditangani Observer
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -88,9 +87,6 @@ class UserController extends Controller
             'role_id' => $roleId,
             'division_id' => $divisionId,
         ]);
-        
-        // --- BLOK KODE ACTIVITY LOG SUDAH DIHAPUS DARI SINI ---
-        // Pencatatan log sekarang ditangani secara otomatis oleh UserObserver.
 
         return response()->json(['message' => 'User berhasil dibuat.', 'user' => $user->load('role', 'division')], 201);
     }
@@ -109,36 +105,54 @@ class UserController extends Controller
 
     /**
      * Memperbarui data user.
+     * --- FUNGSI INI TELAH DIPERBAIKI ---
      */
-    public function update(Request $request, User $user)
-    {
-        Log::info('Update method called for user ID: ' . $user->id);
-        Log::info('Request data: ', $request->all());
-
-        $admin = Auth::user();
-        if ($admin->role->name === 'admin_devisi' && $admin->division_id !== $user->division_id) {
-            Log::warning('Authorization failed for user ID: ' . $admin->id);
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
-            'nipp' => 'nullable|string|unique:users,nipp,' . $user->id,
-            'username' => 'nullable|string|unique:users,username,' . $user->id,
-        ]);
-
-        if ($validator->fails()) {
-            Log::error('Validation failed: ', $validator->errors()->toArray());
-            return response()->json($validator->errors(), 422);
-        }
-
-        Log::info('Validation passed. Updating user...');
-        $user->update($request->only(['name', 'email', 'nipp', 'username']));
-        Log::info('User updated successfully.');
-
-        return response()->json(['message' => 'User berhasil diperbarui.', 'user' => $user]);
+public function update(Request $request, User $user)
+{
+    $admin = Auth::user();
+    if ($admin->role->name === 'admin_devisi' && $admin->division_id !== $user->division_id) {
+        return response()->json(['message' => 'Akses ditolak.'], 403);
     }
+
+    $rules = [
+        'name' => 'required|string|max:255',
+        'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
+        'nipp' => 'nullable|string|unique:users,nipp,' . $user->id,
+        'username' => 'nullable|string|unique:users,username,' . $user->id,
+    ];
+    
+    // Tambahkan validasi password HANYA JIKA diisi
+    if ($request->filled('password')) {
+        $rules['password'] = 'required|string|min:8';
+    }
+
+    if ($admin->role->name === 'super_admin') {
+        $rules['role_id'] = 'required|exists:roles,id';
+        $rules['division_id'] = 'required|exists:divisions,id';
+    }
+
+    $validator = Validator::make($request->all(), $rules);
+
+    if ($validator->fails()) {
+        return response()->json($validator->errors(), 422);
+    }
+    
+    $dataToUpdate = $request->only(['name', 'email', 'nipp', 'username']);
+
+    // Jika ada password baru, hash dan tambahkan ke data update
+    if ($request->filled('password')) {
+        $dataToUpdate['password'] = Hash::make($request->password);
+    }
+
+    if ($admin->role->name === 'super_admin') {
+        $dataToUpdate['role_id'] = $request->role_id;
+        $dataToUpdate['division_id'] = $request->division_id;
+    }
+
+    $user->update($dataToUpdate);
+
+    return response()->json(['message' => 'User berhasil diperbarui.', 'user' => $user->load('role', 'division')]);
+}
 
     /**
      * Menghapus user.

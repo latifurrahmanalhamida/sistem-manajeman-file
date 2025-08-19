@@ -12,6 +12,8 @@ use App\Models\User;
 use App\Observers\UserObserver;
 use App\Models\File;
 use App\Observers\FileObserver;
+use App\Observers\DivisionObserver;
+use App\Models\Division;
 // -----------------------------
 
 class EventServiceProvider extends ServiceProvider
@@ -35,6 +37,7 @@ class EventServiceProvider extends ServiceProvider
         // --- TAMBAHKAN KODE PENDAFTARAN OBSERVER DI SINI ---
         User::observe(UserObserver::class);
         File::observe(FileObserver::class);
+        Division::observe(DivisionObserver::class);
         // ----------------------------------------------------
     }
 
