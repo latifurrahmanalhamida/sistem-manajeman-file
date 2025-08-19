@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\RateLimiter; // <-- DITAMBAHKAN
+use App\Models\User;
 
 class AuthController extends Controller
 {
@@ -14,9 +16,9 @@ class AuthController extends Controller
      */
     public function login(Request $request)
     {
-        // Validasi input dari user
+        // 1. Validasi input
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
+            'identifier' => 'required|string', // Bisa NIPP atau Email
             'password' => 'required|string',
         ]);
 
@@ -24,20 +26,51 @@ class AuthController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        // Coba untuk melakukan otentikasi
-        if (!Auth::attempt($request->only('email', 'password'))) {
+        // 2. Cek Rate Limiter
+        $identifier = $request->input('identifier');
+        $throttleKey = strtolower($identifier) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
             return response()->json([
-                'message' => 'Email atau Password salah.'
-            ], 401); // 401 artinya Unauthorized
+                'message' => 'Terlalu banyak percobaan login. Silakan coba lagi dalam ' . ceil($seconds / 60) . ' menit.'
+            ], 429); // 429 Too Many Requests
         }
 
-        // Jika berhasil, ambil data user
-        $user = $request->user();
+        // 3. Tentukan field untuk otentikasi (email atau nipp)
+        $authField = filter_var($identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'nipp';
 
-        // Buat token API (menggunakan Sanctum)
+        // 4. Coba temukan user berdasarkan identifier
+        $user = User::where($authField, $identifier)->first();
+
+        if (!$user) {
+            // Jika user tidak ditemukan, catat percobaan dan kembalikan pesan spesifik
+            RateLimiter::hit($throttleKey, 300); // Blokir selama 300 detik = 5 menit
+            return response()->json([
+                'message' => 'Email atau NIPP tidak terdaftar.'
+            ], 401);
+        }
+
+        // 5. Jika user ditemukan, coba otentikasi dengan password
+        $credentials = [
+            $authField => $identifier,
+            'password' => $request->input('password')
+        ];
+
+        if (!Auth::attempt($credentials)) {
+            // Jika otentikasi gagal (password salah), catat percobaan
+            RateLimiter::hit($throttleKey, 300); // Blokir selama 300 detik = 5 menit
+            return response()->json([
+                'message' => 'Password salah.'
+            ], 401);
+        }
+
+        // 5. Jika berhasil, reset rate limiter dan kirim response
+        RateLimiter::clear($throttleKey);
+
+        $user = Auth::user();
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // Kirim response berisi token dan data user
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
@@ -45,8 +78,8 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'role' => $user->role->name, // Mengambil nama peran dari relasi
-                'division' => $user->division ? $user->division->name : null // Mengambil nama divisi jika ada
+                'role' => $user->role->name,
+                'division' => $user->division ? $user->division->name : null,
             ]
         ]);
     }
