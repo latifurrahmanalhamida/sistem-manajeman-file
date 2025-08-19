@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Admin\DivisionController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Models\Role;
+use App\Http\Controllers\Api\SuperAdminController;
 
 // Rute Publik
 Route::post('/login', [AuthController::class, 'login']);
@@ -14,18 +15,17 @@ Route::post('/login', [AuthController::class, 'login']);
 // Grup Rute Terotentikasi
 Route::middleware('auth:sanctum')->group(function () {
     
-    // Rute User Umum
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Rute Manajemen File
+    // --- RUTE MANAJEMEN FILE ---
     Route::get('/files', [FileController::class, 'index']);
     Route::post('/files', [FileController::class, 'store']);
     Route::get('/files/recent', [FileController::class, 'recent']);
     Route::get('/files/favorites', [FileController::class, 'favorites']);
     Route::get('/files/trashed', [FileController::class, 'trashed']);
 
-    // Rute Aksi per File
+    // --- DIKEMBALIKAN KE STRUKTUR LAMA YANG LEBIH STABIL ---
     Route::prefix('files/{fileId}')->group(function() {
         Route::get('/', [FileController::class, 'download']);
         Route::delete('/', [FileController::class, 'destroy']);
@@ -33,7 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/restore', [FileController::class, 'restore']);
         Route::delete('/force', [FileController::class, 'forceDelete']);
     });
-    
+
     // --- GRUP RUTE ADMIN (/api/admin/...) ---
     Route::prefix('admin')->group(function() {
 
@@ -54,6 +54,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::apiResource('/divisions', DivisionController::class);
             Route::get('/dashboard-stats', [DashboardController::class, 'index']);
             Route::get('/roles', fn() => Role::all());
+            Route::get('/activity-logs', [SuperAdminController::class, 'getActivityLogs']);
         });
     });
-});
+
+}); 

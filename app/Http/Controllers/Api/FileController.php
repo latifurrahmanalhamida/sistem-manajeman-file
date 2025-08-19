@@ -26,7 +26,7 @@ class FileController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|max:10240',
+            'file' => 'required|file|max:10240', // 10MB Max
             'new_name' => 'nullable|string|max:255',
         ]);
 
@@ -108,7 +108,7 @@ class FileController extends Controller
 
     public function toggleFavorite($fileId)
     {
-        $file = File::findOrFail($fileId);
+        $file = File::withTrashed()->findOrFail($fileId);
         $this->authorize('update', $file);
         $file->is_favorited = !$file->is_favorited;
         $file->save();
@@ -117,16 +117,15 @@ class FileController extends Controller
 
     public function restore(Request $request, $fileId)
     {
-        $fileToRestore = File::onlyTrashed()->findOrFail($fileId);
-        $this->authorize('restore', $fileToRestore);
+        $file = File::onlyTrashed()->findOrFail($fileId);
+        $this->authorize('restore', $file);
 
         $newName = $request->input('new_name');
         $overwrite = $request->boolean('overwrite');
-
-        $fileNameToCheck = $newName ?: $fileToRestore->nama_file_asli;
+        $fileNameToCheck = $newName ?: $file->nama_file_asli;
 
         $existingActiveFile = File::where('nama_file_asli', $fileNameToCheck)
-                                  ->where('division_id', $fileToRestore->division_id)
+                                  ->where('division_id', $file->division_id)
                                   ->first();
 
         if ($existingActiveFile && !$overwrite) {
@@ -141,11 +140,11 @@ class FileController extends Controller
             $existingActiveFile->forceDelete();
         }
         
-        $fileToRestore->restore();
+        $file->restore();
 
         if ($newName) {
-            $fileToRestore->nama_file_asli = $newName;
-            $fileToRestore->save();
+            $file->nama_file_asli = $newName;
+            $file->save();
         }
 
         return response()->json(['message' => 'File berhasil dipulihkan.']);
@@ -162,7 +161,7 @@ class FileController extends Controller
 
     public function download($fileId)
     {
-        $file = File::findOrFail($fileId);
+        $file = File::withTrashed()->findOrFail($fileId);
         $this->authorize('view', $file);
 
         if (!Storage::exists($file->path_penyimpanan)) {

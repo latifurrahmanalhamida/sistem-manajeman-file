@@ -7,6 +7,13 @@ use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Event;
 
+// --- TAMBAHKAN IMPORT INI ---
+use App\Models\User;
+use App\Observers\UserObserver;
+use App\Models\File;
+use App\Observers\FileObserver;
+// -----------------------------
+
 class EventServiceProvider extends ServiceProvider
 {
     /**
@@ -25,7 +32,10 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // --- TAMBAHKAN KODE PENDAFTARAN OBSERVER DI SINI ---
+        User::observe(UserObserver::class);
+        File::observe(FileObserver::class);
+        // ----------------------------------------------------
     }
 
     /**

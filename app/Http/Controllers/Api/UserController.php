@@ -8,10 +8,11 @@ use App\Models\User;
 use App\Models\Role;
 use App\Models\File;
 use App\Models\Division;
+// Import ActivityLog tidak lagi diperlukan di sini, karena sudah ditangani Observer
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log; // <-- BARIS INI DITAMBAHKAN
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -87,6 +88,9 @@ class UserController extends Controller
             'role_id' => $roleId,
             'division_id' => $divisionId,
         ]);
+        
+        // --- BLOK KODE ACTIVITY LOG SUDAH DIHAPUS DARI SINI ---
+        // Pencatatan log sekarang ditangani secara otomatis oleh UserObserver.
 
         return response()->json(['message' => 'User berhasil dibuat.', 'user' => $user->load('role', 'division')], 201);
     }
@@ -143,17 +147,14 @@ class UserController extends Controller
     {
         $admin = Auth::user();
 
-        // Otorisasi: Admin Devisi hanya boleh hapus user di divisinya
         if ($admin->role->name === 'admin_devisi' && $admin->division_id !== $user->division_id) {
             return response()->json(['message' => 'Akses ditolak.'], 403);
         }
         
-        // Jangan biarkan user menghapus dirinya sendiri
         if ($admin->id === $user->id) {
             return response()->json(['message' => 'Anda tidak bisa menghapus diri sendiri.'], 403);
         }
 
-        // Opsional: Tambahkan logika untuk menangani file milik user yang akan dihapus
         File::where('uploader_id', $user->id)->update(['uploader_id' => $admin->id]);
 
         $user->delete();
@@ -170,8 +171,7 @@ class UserController extends Controller
         if (!$user) {
             return response()->json(['message' => 'User tidak ditemukan.'], 404);
         }
-
-        $this->authorize('restore', $user);
+        
         $user->restore();
 
         return response()->json(['message' => 'User berhasil dikembalikan.', 'user' => $user]);
@@ -186,20 +186,18 @@ class UserController extends Controller
         if (!$user) {
             return response()->json(['message' => 'User tidak ditemukan.'], 404);
         }
-
-        $this->authorize('forceDelete', $user);
+        
         $user->forceDelete();
 
         return response()->json(['message' => 'User berhasil dihapus permanen.']);
     }
+    
     public function trashed()
     {
         $admin = Auth::user();
         
-        // Gunakan onlyTrashed() untuk mengambil hanya data yang terhapus
         $query = User::onlyTrashed()->with('role:id,name', 'division:id,name');
 
-        // Terapkan filter berdasarkan divisi jika admin adalah admin_devisi
         if ($admin->role->name === 'admin_devisi') {
             $query->where('division_id', $admin->division_id);
         }
