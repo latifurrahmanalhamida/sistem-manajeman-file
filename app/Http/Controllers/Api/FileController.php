@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\File;
+use App\Models\Folder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -13,14 +14,50 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FileController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
-        $query = File::query()->with('uploader:id,name', 'division:id,name');
+        $divisionId = $user->division_id;
+        $folderId = $request->query('folder_id');
+
+        // --- PERBAIKAN DI SINI: Tambahkan withSum untuk folder ---
+        $foldersQuery = Folder::query()
+            ->with('user:id,name')
+            ->withSum('files', 'ukuran_file') // Menghitung total ukuran file di dalam folder
+            ->when(is_null($folderId), function ($q) {
+                $q->whereNull('parent_folder_id');
+            }, function ($q) use ($folderId) {
+                $q->where('parent_folder_id', $folderId);
+            });
+
+        $filesQuery = File::query()->with('uploader:id,name')
+            ->when(is_null($folderId), function ($q) {
+                $q->whereNull('folder_id');
+            }, function ($q) use ($folderId) {
+                $q->where('folder_id', $folderId);
+            });
+
         if ($user->role->name !== 'super_admin') {
-            $query->where('division_id', 'like', $user->division_id);
+            $foldersQuery->where('division_id', $divisionId);
+            $filesQuery->where('division_id', $divisionId);
         }
-        return response()->json($query->latest()->get());
+
+        $currentFolder = $folderId ? Folder::with('parent')->find($folderId) : null;
+        $breadcrumbs = collect();
+        if ($currentFolder) {
+            $current = $currentFolder;
+            while ($current) {
+                $breadcrumbs->prepend($current->only(['id','name']));
+                $current = $current->parent;
+            }
+        }
+
+        return response()->json([
+            'folders' => $foldersQuery->latest()->get(),
+            'files'   => $filesQuery->latest()->get(),
+            'breadcrumbs' => $breadcrumbs->values(),
+            'current_folder' => $currentFolder ? $currentFolder->only(['id','name','parent_folder_id']) : null,
+        ]);
     }
 
     public function store(Request $request)
@@ -28,6 +65,7 @@ class FileController extends Controller
         $request->validate([
             'file' => 'required|file|max:10240', // 10MB Max
             'new_name' => 'nullable|string|max:255',
+            'folder_id' => 'nullable|integer|exists:folders,id',
         ]);
 
         $uploadedFile = $request->file('file');
@@ -56,6 +94,15 @@ class FileController extends Controller
             $existingFile->forceDelete();
         }
 
+        // Validasi folder_id satu divisi (jika dikirim)
+        $folderId = $request->input('folder_id');
+        if ($folderId) {
+            $folder = \App\Models\Folder::findOrFail($folderId);
+            if ($folder->division_id !== $divisionId && $user->role->name !== 'super_admin') {
+                return response()->json(['message' => 'Folder tujuan berada di divisi berbeda.'], 422);
+            }
+        }
+
         $path = $uploadedFile->store('uploads/' . $divisionId);
 
         $newFile = File::create([
@@ -66,6 +113,7 @@ class FileController extends Controller
             'ukuran_file' => $uploadedFile->getSize(),
             'uploader_id' => $user->id,
             'division_id' => $divisionId,
+            'folder_id' => $folderId,
         ]);
 
         return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);

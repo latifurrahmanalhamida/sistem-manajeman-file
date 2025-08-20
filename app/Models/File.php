@@ -19,6 +19,7 @@ class File extends Model
         'ukuran_file',
         'uploader_id',
         'division_id',
+        'folder_id',
         'is_favorited', // <-- 3. Tambahkan ini agar bisa diisi
     ];
 
@@ -30,5 +31,10 @@ class File extends Model
     public function division(): BelongsTo
     {
         return $this->belongsTo(Division::class);
+    }
+
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(Folder::class);
     }
 }

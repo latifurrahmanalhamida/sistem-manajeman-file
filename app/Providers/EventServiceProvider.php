@@ -14,6 +14,8 @@ use App\Models\File;
 use App\Observers\FileObserver;
 use App\Observers\DivisionObserver;
 use App\Models\Division;
+use App\Observers\FolderObserver;
+use App\Models\Folder;
 // -----------------------------
 
 class EventServiceProvider extends ServiceProvider
@@ -38,6 +40,7 @@ class EventServiceProvider extends ServiceProvider
         User::observe(UserObserver::class);
         File::observe(FileObserver::class);
         Division::observe(DivisionObserver::class);
+        Folder::observe(FolderObserver::class);
         // ----------------------------------------------------
     }
 

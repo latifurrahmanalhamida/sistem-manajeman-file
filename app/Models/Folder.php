@@ -58,4 +58,20 @@ class Folder extends Model
     {
         return $this->hasMany(File::class);
     }
+
+    /**
+     * Alias parent() untuk konsistensi dengan parameter API parent_id.
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Folder::class, 'parent_folder_id');
+    }
+
+    /**
+     * Alias children() untuk turunan sub-folder.
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(Folder::class, 'parent_folder_id');
+    }
 }

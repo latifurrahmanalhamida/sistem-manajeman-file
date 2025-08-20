@@ -35,4 +35,12 @@ class Division extends Model
         return $this->hasMany(File::class);
     }
 
+    /**
+     * Get the folders for the division.
+     */
+    public function folders(): HasMany
+    {
+        return $this->hasMany(Folder::class);
+    }
+
 }

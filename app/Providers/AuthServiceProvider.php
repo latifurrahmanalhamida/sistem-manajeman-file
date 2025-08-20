@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Models\File; // Tambahkan import untuk File
+use App\Models\Folder;
+use App\Policies\FolderPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 use App\Policies\UserPolicy;
@@ -19,6 +21,7 @@ class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         File::class => FilePolicy::class,
         User::class => UserPolicy::class, // <-- BARIS INI DITAMBAHKAN
+        Folder::class => FolderPolicy::class,
     ];
 
     /**

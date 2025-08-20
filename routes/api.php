@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Models\Role;
 use App\Http\Controllers\Api\SuperAdminController;
+use App\Http\Controllers\Api\Admin\FolderController;
 
 // Rute Publik
 Route::post('/login', [AuthController::class, 'login']);
@@ -47,6 +48,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/users/{user}', [UserController::class, 'destroy'])->withTrashed();
             Route::put('/users/{user}/restore', [UserController::class, 'restore'])->withTrashed();
             Route::delete('/users/{user}/force-delete', [UserController::class, 'forceDelete'])->withTrashed();
+            Route::apiResource('/folders', FolderController::class);
+            Route::get('/folders/trashed', [FolderController::class, 'trashed']);
+            Route::post('/folders/{id}/restore', [FolderController::class, 'restore']);
+            Route::delete('/folders/{id}/force', [FolderController::class, 'forceDelete']);
         });
 
         // Rute yang HANYA bisa diakses Super Admin
