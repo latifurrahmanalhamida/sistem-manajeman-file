@@ -11,9 +11,31 @@ use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-
 class FileController extends Controller
 {
+    /**
+     * Rename file
+     */
+    public function rename(Request $request, $fileId)
+    {
+        $request->validate([
+            'new_name' => 'required|string|max:255',
+        ]);
+        $file = File::findOrFail($fileId);
+        $this->authorize('update', $file);
+        $newName = $request->input('new_name');
+        // Cek apakah nama baru sudah dipakai file lain di divisi yang sama
+        $exists = File::where('nama_file_asli', $newName)
+            ->where('division_id', $file->division_id)
+            ->where('id', '!=', $fileId)
+            ->exists();
+        if ($exists) {
+            return response()->json(['message' => 'Nama file sudah digunakan di divisi ini.'], 409);
+        }
+        $file->nama_file_asli = $newName;
+        $file->save();
+        return response()->json(['message' => 'Nama file berhasil diubah.', 'file' => $file]);
+    }
     public function index(Request $request)
     {
         $user = Auth::user();

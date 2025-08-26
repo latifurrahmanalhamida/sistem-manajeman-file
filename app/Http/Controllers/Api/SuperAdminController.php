@@ -9,6 +9,14 @@ use Illuminate\Http\Request;
 class SuperAdminController extends Controller
 {
     /**
+     * Mengambil semua divisi beserta folder-foldernya.
+     */
+    public function getDivisionsWithFolders()
+    {
+        $divisions = \App\Models\Division::with('folders')->get();
+        return response()->json($divisions);
+    }
+    /**
      * Mengambil daftar log aktivitas dengan paginasi dan filter tanggal.
      */
     public function getActivityLogs(Request $request)
@@ -36,9 +44,8 @@ class SuperAdminController extends Controller
 
         // -----------------------------------------
 
-        // Lakukan paginasi setelah semua filter diterapkan
-        $logs = $query->paginate(15)->withQueryString();
-
-        return response()->json($logs);
+    // Lakukan paginasi setelah semua filter diterapkan
+    $logs = $query->paginate(15);
+    return response()->json($logs);
     }
 }

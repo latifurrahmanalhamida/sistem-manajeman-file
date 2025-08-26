@@ -28,11 +28,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- DIKEMBALIKAN KE STRUKTUR LAMA YANG LEBIH STABIL ---
     Route::prefix('files/{fileId}')->group(function() {
-        Route::get('/', [FileController::class, 'download']);
-        Route::delete('/', [FileController::class, 'destroy']);
-        Route::post('/favorite', [FileController::class, 'toggleFavorite']);
-        Route::post('/restore', [FileController::class, 'restore']);
-        Route::delete('/force', [FileController::class, 'forceDelete']);
+    Route::put('/rename', [FileController::class, 'rename']);
+    Route::get('/', [FileController::class, 'download']);
+    Route::delete('/', [FileController::class, 'destroy']);
+    Route::post('/favorite', [FileController::class, 'toggleFavorite']);
+    Route::post('/restore', [FileController::class, 'restore']);
+    Route::delete('/force', [FileController::class, 'forceDelete']);
     });
 
     // --- GRUP RUTE ADMIN (/api/admin/...) ---
@@ -58,6 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::middleware('check.role:super_admin')->group(function () {
             Route::apiResource('/divisions', DivisionController::class);
             Route::get('/dashboard-stats', [DashboardController::class, 'index']);
+            Route::get('/divisions-with-folders', [SuperAdminController::class, 'getDivisionsWithFolders']);
             Route::get('/roles', fn() => Role::all());
             Route::get('/activity-logs', [SuperAdminController::class, 'getActivityLogs']);
         });

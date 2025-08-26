@@ -17,11 +17,11 @@ class FolderController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $parentId = $request->query('parent_id');
+    $parentId = $request->query('parent_folder_id');
 
-        $query = Folder::with('user:id,name')
-                       ->withSum('files', 'ukuran_file') // <-- INI YANG MENGHITUNG UKURAN
-                       ->where('parent_id', $parentId);
+    $query = Folder::with('user:id,name')
+               ->withSum('files', 'ukuran_file')
+               ->where('parent_folder_id', $parentId);
 
         if ($user->role->name !== 'super_admin') {
             $query->where('division_id', $user->division_id);
@@ -41,17 +41,17 @@ class FolderController extends Controller
                 'required', 'string', 'max:255',
                 Rule::unique('folders')->where(function ($query) use ($user, $request) {
                     return $query->where('division_id', $user->division_id)
-                                 ->where('parent_id', $request->parent_id);
+                                 ->where('parent_folder_id', $request->parent_folder_id);
                 }),
             ],
-            'parent_id' => 'nullable|exists:folders,id',
+            'parent_folder_id' => 'nullable|exists:folders,id',
         ]);
 
         $folder = Folder::create([
             'name' => $validated['name'],
             'division_id' => $user->division_id,
             'user_id' => $user->id,
-            'parent_id' => $validated['parent_id'] ?? null,
+            'parent_folder_id' => $validated['parent_folder_id'] ?? null,
         ]);
 
         return response()->json($folder, 201);
@@ -83,7 +83,7 @@ class FolderController extends Controller
                 'required', 'string', 'max:255',
                 Rule::unique('folders')->where(function ($query) use ($user, $folder) {
                     return $query->where('division_id', $user->division_id)
-                                 ->where('parent_id', $folder->parent_id);
+                                 ->where('parent_folder_id', $folder->parent_folder_id);
                 })->ignore($folder->id),
             ],
         ]);
