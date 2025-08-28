@@ -62,6 +62,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/divisions-with-folders', [SuperAdminController::class, 'getDivisionsWithFolders']);
             Route::get('/roles', fn() => Role::all());
             Route::get('/activity-logs', [SuperAdminController::class, 'getActivityLogs']);
+
+            Route::get('/login-history', [SuperAdminController::class, 'getLoginHistory']);
+            Route::delete('/login-history', [SuperAdminController::class, 'purgeLoginHistory']);
+            Route::get('/login-history/count-purge', [SuperAdminController::class, 'countLoginHistoryForPurge']);
         });
     });
 
