@@ -42,7 +42,7 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $admin = Auth::user();
-        
+
         if (!in_array($admin->role->name, ['super_admin', 'admin_devisi'])) {
             return response()->json(['message' => 'Anda tidak memiliki izin untuk membuat user.'], 403);
         }
@@ -120,7 +120,7 @@ public function update(Request $request, User $user)
         'nipp' => 'nullable|string|unique:users,nipp,' . $user->id,
         'username' => 'nullable|string|unique:users,username,' . $user->id,
     ];
-    
+
     // Tambahkan validasi password HANYA JIKA diisi
     if ($request->filled('password')) {
         $rules['password'] = 'required|string|min:8';
@@ -136,7 +136,7 @@ public function update(Request $request, User $user)
     if ($validator->fails()) {
         return response()->json($validator->errors(), 422);
     }
-    
+
     $dataToUpdate = $request->only(['name', 'email', 'nipp', 'username']);
 
     // Jika ada password baru, hash dan tambahkan ke data update
@@ -164,7 +164,7 @@ public function update(Request $request, User $user)
         if ($admin->role->name === 'admin_devisi' && $admin->division_id !== $user->division_id) {
             return response()->json(['message' => 'Akses ditolak.'], 403);
         }
-        
+
         if ($admin->id === $user->id) {
             return response()->json(['message' => 'Anda tidak bisa menghapus diri sendiri.'], 403);
         }
@@ -185,7 +185,7 @@ public function update(Request $request, User $user)
         if (!$user) {
             return response()->json(['message' => 'User tidak ditemukan.'], 404);
         }
-        
+
         $user->restore();
 
         return response()->json(['message' => 'User berhasil dikembalikan.', 'user' => $user]);
@@ -200,16 +200,16 @@ public function update(Request $request, User $user)
         if (!$user) {
             return response()->json(['message' => 'User tidak ditemukan.'], 404);
         }
-        
+
         $user->forceDelete();
 
         return response()->json(['message' => 'User berhasil dihapus permanen.']);
     }
-    
+
     public function trashed()
     {
         $admin = Auth::user();
-        
+
         $query = User::onlyTrashed()->with('role:id,name', 'division:id,name');
 
         if ($admin->role->name === 'admin_devisi') {

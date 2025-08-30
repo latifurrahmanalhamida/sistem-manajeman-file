@@ -15,11 +15,15 @@ return [
     |
     */
 
+
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
-    'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:3000')],
+    'allowed_methods' => ['*'],
 
-    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    'allowed_origins' => ['http://localhost:3000'], // frontend React kamu
+    // kalau mau bebas semua origin: ['*']
+
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 
@@ -27,6 +31,23 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => true,
+    'supports_credentials' => false,
+
+
+
+
+    // 'paths' => ['api/*', 'sanctum/csrf-cookie'],
+
+    // 'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:3000')],
+
+    // 'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+
+    // 'allowed_headers' => ['*'],
+
+    // 'exposed_headers' => [],
+
+    // 'max_age' => 0,
+
+    // 'supports_credentials' => true,
 
 ];

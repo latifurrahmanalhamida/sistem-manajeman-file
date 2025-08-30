@@ -10,10 +10,24 @@ class Kernel extends ConsoleKernel
     /**
      * Define the application's command schedule.
      */
-    protected function schedule(Schedule $schedule): void
+    protected function schedule(Schedule $schedule)
+{
+    $schedule->command('backup:run --only-files')->everyMinute();
+
+    // backup setiap jam
+    // $schedule->command('backup:run --only-db')->hourly();
+    // $schedule->command('backup:run')->hourly();
+
+    // atau jika mau tiap hari jam 2 pagi:
+    // $schedule->command('backup:all')->dailyAt('02:00');
+}
+
+    protected function scheduleTimezone()
     {
-        // $schedule->command('inspire')->hourly();
+        return 'Asia/Jakarta';
     }
+
+
 
     /**
      * Register the commands for the application.
