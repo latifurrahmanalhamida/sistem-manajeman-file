@@ -49,10 +49,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/users/{user}', [UserController::class, 'destroy'])->withTrashed();
             Route::put('/users/{user}/restore', [UserController::class, 'restore'])->withTrashed();
             Route::delete('/users/{user}/force-delete', [UserController::class, 'forceDelete'])->withTrashed();
-            Route::apiResource('/folders', FolderController::class);
             Route::get('/folders/trashed', [FolderController::class, 'trashed']);
             Route::post('/folders/{id}/restore', [FolderController::class, 'restore']);
             Route::delete('/folders/{id}/force', [FolderController::class, 'forceDelete']);
+             Route::apiResource('/folders', FolderController::class);
         });
 
         // Rute yang HANYA bisa diakses Super Admin
