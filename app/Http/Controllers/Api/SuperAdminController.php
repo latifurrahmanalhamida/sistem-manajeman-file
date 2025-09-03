@@ -10,9 +10,27 @@ use Carbon\Carbon;
 
 class SuperAdminController extends Controller
 {
-    /**
-     * Mengambil semua divisi beserta folder-foldernya.
-     */
+    public function getDivisionsWithStats()
+    {
+        // Ambil semua divisi dari database
+        $divisions = \App\Models\Division::query()
+            // Hitung jumlah relasi 'folders' dan simpan sebagai 'folders_count'
+            ->withCount('folders')
+            // Jumlahkan kolom 'ukuran_file' dari relasi 'files' dan simpan sebagai 'files_sum_ukuran_file'
+            ->withSum('files', 'ukuran_file')
+            // Urutkan berdasarkan nama divisi
+            ->orderBy('name')
+            ->get();
+
+        // Ubah nama properti agar lebih rapi saat dikirim sebagai JSON
+        $divisions->transform(function ($division) {
+            $division->total_storage = $division->files_sum_ukuran_file ?? 0;
+            unset($division->files_sum_ukuran_file); // Hapus properti lama
+            return $division;
+        });
+
+        return response()->json($divisions);
+    }
     public function getDivisionsWithFolders()
     {
         $divisions = \App\Models\Division::with('folders')->get();
