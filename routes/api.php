@@ -11,7 +11,7 @@ use App\Http\Controllers\Api\SuperAdminController;
 use App\Http\Controllers\Api\Admin\FolderController;
 
 // Rute Publik
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
 // Grup Rute Terotentikasi
 Route::middleware('auth:sanctum')->group(function () {
