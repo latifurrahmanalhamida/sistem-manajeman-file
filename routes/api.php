@@ -1,11 +1,16 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\Admin\DivisionController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\BackupController;
+use illuminate\Support\Facades\Routes;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Storage;
 use App\Models\Role;
 use App\Http\Controllers\Api\SuperAdminController;
 use App\Http\Controllers\Api\Admin\FolderController;
@@ -15,7 +20,8 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 
 // Grup Rute Terotentikasi
 Route::middleware('auth:sanctum')->group(function () {
-    
+
+
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
@@ -35,6 +41,57 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/restore', [FileController::class, 'restore']);
     Route::delete('/force', [FileController::class, 'forceDelete']);
     });
+
+    Route::prefix('backup')->group(function () {
+    Route::post('/backup', [BackupController::class, 'backupAll']);           // Full backup
+    Route::post('/database', [BackupController::class, 'backupDatabase']); // Database only
+    Route::post('/storage', [BackupController::class, 'backupStorage']);   // Files only
+    Route::get('/list', [BackupController::class, 'listBackups']);         // List backups
+    Route::delete('/delete/{filename}', [BackupController::class, 'deleteBackup']);
+    Route::get('/download/{filename}', [BackupController::class, 'downloadBackup']); // Download
+
+     Route::post('/users', [BackupController::class, 'backupUsersTable']);
+    });
+
+//     Route::post('/backup/{type}', function ($type, Request $request) {
+//     try {
+//         if ($type === 'database') {
+//             Artisan::call('backup:run --only-db');
+//         } elseif ($type === 'storage') {
+//             Artisan::call('backup:run --only-files');
+//         } else {
+//             Artisan::call('backup:run');
+//         }
+
+//         return response()->json([
+//             'message' => 'Backup ' . $type . ' berhasil!',
+//             'output' => Artisan::output(),
+//         ]);
+//     } catch (\Exception $e) {
+//         return response()->json([
+//             'message' => 'Backup gagal!',
+//             'error' => $e->getMessage(),
+//         ], 500);
+//     }
+// });
+
+//     Route::post('/backup/{type}', function ($type) {
+//     try {
+//         if ($type === 'database') {
+//             Artisan::call('backup:run --only-db');
+//         } elseif ($type === 'storage') {
+//             Artisan::call('backup:run --only-files');
+//         } else {
+//             return response()->json(['message' => 'Jenis backup tidak dikenal'], 400);
+//         }
+
+//         return response()->json(['message' => 'Backup berhasil dijalankan']);
+//     } catch (\Exception $e) {
+//         return response()->json(['message' => 'Backup gagal: '.$e->getMessage()], 500);
+//     }
+
+
+// });
 
     // --- GRUP RUTE ADMIN (/api/admin/...) ---
     Route::prefix('admin')->group(function() {
@@ -70,4 +127,4 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
 
-}); 
+});

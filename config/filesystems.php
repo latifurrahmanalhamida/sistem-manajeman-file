@@ -36,6 +36,20 @@ return [
             'throw' => false,
         ],
 
+        'backup_all' => [
+        'driver' => 'local',
+        'root' => 'D:/Backup/All', // lokasi backup file dan database
+        ],
+
+        'backup_disk' => [
+            'driver' => 'local',
+            'root' => 'D:/Backup/Files',  // lokasi baru
+            ],
+    // 'backup_disk' => [
+    // 'driver' => 'local',
+    // 'root' => 'C:/BackupProject',  // lokasi baru
+    //     ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
