@@ -33,10 +33,23 @@ class FileObserver
      * Handle the File "updated" event.
      * --- FUNGSI INI DIPERBAIKI ---
      */
-    public function updated(File $file): void
+public function updated(File $file): void
     {
-        // Pengecekan 'isRestoring' yang salah sudah dihapus.
-        // Untuk File, kita tidak perlu logika ini karena pemulihan tidak memicu 'updated'.
+        // Cek apakah kolom 'nama_file_asli' yang berubah.
+        // Ini untuk memastikan kita hanya mencatat log saat ada perubahan nama.
+        if ($file->isDirty('nama_file_asli')) {
+            // Ambil nama file sebelum diubah
+            $originalName = $file->getOriginal('nama_file_asli');
+            
+            ActivityLog::create([
+                'user_id'     => Auth::id(),
+                'action'      => 'Mengubah Nama File',
+                'target_type' => get_class($file),
+                'target_id'   => $file->id,
+                'details'     => ['info' => "Mengubah nama file dari '{$originalName}' menjadi '{$file->nama_file_asli}'."],
+                'status'      => 'Berhasil',
+            ]);
+        }
     }
 
     /**

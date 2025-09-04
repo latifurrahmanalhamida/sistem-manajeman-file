@@ -34,6 +34,7 @@ class FileController extends Controller
         }
         $file->nama_file_asli = $newName;
         $file->save();
+        $file->load('uploader:id,name');
         return response()->json(['message' => 'Nama file berhasil diubah.', 'file' => $file]);
     }
     public function index(Request $request)

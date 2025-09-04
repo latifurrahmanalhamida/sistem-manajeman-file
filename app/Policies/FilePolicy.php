@@ -23,7 +23,17 @@ class FilePolicy
 
     public function update(User $user, File $file): bool
     {
-        return $user->division_id === $file->division_id;
+        // Izinkan jika user adalah Admin Devisi di divisi yang sama
+        if ($user->role->name === 'admin_devisi') {
+            return $user->division_id === $file->division_id;
+        }
+
+        // Izinkan jika user adalah User Devisi, di divisi yang sama, DAN dia pengunggahnya
+        if ($user->role->name === 'user_devisi') {
+            return $user->id === $file->uploader_id && $user->division_id === $file->division_id;
+        }
+
+        return false;
     }
 
     
