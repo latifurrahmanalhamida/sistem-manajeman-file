@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use App\Models\LoginHistory; 
 use Carbon\Carbon; 
+use Illuminate\Support\Facades\Log;
 
 class SuperAdminController extends Controller
 {
@@ -138,5 +139,74 @@ class SuperAdminController extends Controller
         $count = $query->count();
 
         return response()->json(['count' => $count]);
+    }
+
+    public function purgeActivityLogs(Request $request)
+    {
+        $validated = $request->validate([
+            'range' => 'required|string|in:1d,3d,1w,1m,1y,all',
+        ]);
+
+        $range = $validated['range'];
+        $query = ActivityLog::query();
+
+        if ($range === '1d') {
+            $query->where('created_at', '<', Carbon::now()->subDay());
+        } elseif ($range === '3d') {
+            $query->where('created_at', '<', Carbon::now()->subDays(3));
+        } elseif ($range === '1w') {
+            $query->where('created_at', '<', Carbon::now()->subWeek());
+        } elseif ($range === '1m') {
+            $query->where('created_at', '<', Carbon::now()->subMonth());
+        } elseif ($range === '1y') {
+            $query->where('created_at', '<', Carbon::now()->subYear());
+        }
+
+        $count = $query->count();
+        $query->delete();
+
+        return response()->json([
+            'message' => "Berhasil menghapus {$count} data log aktivitas."
+        ]);
+    }
+
+    public function deleteActivityLogsByRange(Request $request)
+    {
+        Log::info('Delete activity logs request received', ['range' => $request->range]);
+        $validated = $request->validate([
+            'range' => 'required|string|in:1_day,3_days,1_week,1_month,1_year,all',
+        ]);
+
+        $range = $validated['range'];
+        $query = ActivityLog::query();
+
+        if ($range === '1_day') {
+            $query->where('created_at', '<', Carbon::now()->subDay());
+        } elseif ($range === '3_days') {
+            $query->where('created_at', '<', Carbon::now()->subDays(3));
+        } elseif ($range === '1_week') {
+            $query->where('created_at', '<', Carbon::now()->subWeek());
+        } elseif ($range === '1_month') {
+            $query->where('created_at', '<', Carbon::now()->subMonth());
+        } elseif ($range === '1_year') {
+            $query->where('created_at', '<', Carbon::now()->subYear());
+        } elseif ($range !== 'all') {
+            // Jika range tidak valid (selain 'all'), kembalikan error
+            return response()->json(['message' => 'Rentang waktu tidak valid.'], 400);
+        }
+
+        try {
+            $count = $query->count();
+            $query->delete();
+
+            Log::info("Successfully deleted {$count} activity logs.");
+
+            return response()->json([
+                'message' => "Berhasil menghapus {$count} data log aktivitas."
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error deleting activity logs: ' . $e->getMessage());
+            return response()->json(['message' => 'Gagal menghapus log aktivitas karena kesalahan server.'], 500);
+        }
     }
 }
