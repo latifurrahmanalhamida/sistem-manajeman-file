@@ -40,8 +40,17 @@ class FileController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $divisionId = $user->division_id;
         $folderId = $request->query('folder_id');
+
+        // Determine which division to show
+        $targetDivisionId = $user->division_id; // Default to user's own division
+
+        // Allow super_admin to switch division view
+        if ($user->role->name === 'super_admin' && $request->has('division_id') && $request->query('division_id') !== '') {
+            $targetDivisionId = $request->query('division_id');
+        } else {
+            $targetDivisionId = $user->division_id;
+        }
 
         // --- PERBAIKAN DI SINI: Tambahkan withSum untuk folder ---
         $foldersQuery = Folder::query()
@@ -60,9 +69,10 @@ class FileController extends Controller
                 $q->where('folder_id', $folderId);
             });
 
-        if ($user->role->name !== 'super_admin') {
-            $foldersQuery->where('division_id', $divisionId);
-            $filesQuery->where('division_id', $divisionId);
+        // Apply division filtering for all roles
+        if ($targetDivisionId) {
+            $foldersQuery->where('division_id', $targetDivisionId);
+            $filesQuery->where('division_id', $targetDivisionId);
         }
 
         $currentFolder = $folderId ? Folder::with('parent')->find($folderId) : null;
