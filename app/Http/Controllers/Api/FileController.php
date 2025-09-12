@@ -96,28 +96,57 @@ class FileController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar', // 500MB Max & tipe file aman
+            'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar',
             'new_name' => 'nullable|string|max:255',
             'folder_id' => 'nullable|integer|exists:folders,id',
+            'division_id' => 'nullable|integer|exists:divisions,id', // Validasi tambahan
         ]);
 
         $uploadedFile = $request->file('file');
         $originalName = $uploadedFile->getClientOriginalName();
         $newName = $request->input('new_name');
         $overwrite = $request->boolean('overwrite');
+        $folderId = $request->input('folder_id');
         
         $user = Auth::user();
-        $divisionId = $user->division_id;
+        
+        // --- LOGIKA SOLUSI BARU ---
+        $divisionId = null;
+        if ($user->role->name === 'super_admin') {
+            // Jika folder_id diberikan, tentukan division_id dari folder tersebut
+            if ($folderId) {
+                $folder = Folder::find($folderId);
+                if ($folder) {
+                    $divisionId = $folder->division_id;
+                }
+            }
+            // Jika tidak ada folder_id, fallback ke division_id dari request (untuk unggah ke root divisi)
+            elseif ($request->has('division_id')) {
+                $divisionId = $request->input('division_id');
+            }
+        } else {
+            // Untuk user biasa, selalu gunakan division_id mereka sendiri
+            $divisionId = $user->division_id;
+        }
+
+        // Jika setelah semua pengecekan divisionId masih null, berarti ada yang salah
+        if (is_null($divisionId)) {
+            return response()->json(['message' => 'Gagal menentukan divisi untuk file ini.'], 422);
+        }
+        // --- AKHIR LOGIKA SOLUSI BARU ---
 
         $fileNameToSave = $newName ?: $originalName;
 
-        $existingFile = File::where('nama_file_asli', $fileNameToSave)
+        // Cek file yang sudah ada di lokasi yang sama
+        $existingFileQuery = File::where('nama_file_asli', $fileNameToSave)
                             ->where('division_id', $divisionId)
-                            ->first();
+                            ->where('folder_id', $folderId);
+        
+        $existingFile = $existingFileQuery->first();
 
         if ($existingFile && !$overwrite) {
             return response()->json([
-                'message' => 'File dengan nama "'.$fileNameToSave.'" sudah ada.',
+                'message' => 'File dengan nama "'.$fileNameToSave.'" sudah ada di lokasi ini.',
                 'status' => 'conflict'
             ], 409);
         }
@@ -127,12 +156,11 @@ class FileController extends Controller
             $existingFile->forceDelete();
         }
 
-        // Validasi folder_id satu divisi (jika dikirim)
-        $folderId = $request->input('folder_id');
+        // Validasi folder tujuan ada di divisi yang benar (jika ada folder)
         if ($folderId) {
-            $folder = \App\Models\Folder::findOrFail($folderId);
-            if ($folder->division_id !== $divisionId && $user->role->name !== 'super_admin') {
-                return response()->json(['message' => 'Folder tujuan berada di divisi berbeda.'], 422);
+            $folder = Folder::find($folderId); // Ambil ulang atau gunakan yang sudah ada
+            if ($folder && $folder->division_id != $divisionId) {
+                 return response()->json(['message' => 'Folder tujuan tidak cocok dengan divisi yang dipilih.'], 422);
             }
         }
 
