@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Casts\Attribute;
-use Jenssegers\Agent\Agent; // Impor library yang baru diinstal
+use Jenssegers\Agent\Agent;
 
 class LoginHistory extends Model
 {
@@ -16,6 +16,21 @@ class LoginHistory extends Model
      * Tentukan nama tabel jika tidak mengikuti konvensi Laravel.
      */
     protected $table = 'login_histories';
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    // --- TAMBAHKAN BLOK INI ---
+    protected $fillable = [
+        'user_id',
+        'action',
+        'ip_address',
+        'user_agent',
+        'created_at',
+        'updated_at',
+    ];
 
     /**
      * Relasi ke model User.

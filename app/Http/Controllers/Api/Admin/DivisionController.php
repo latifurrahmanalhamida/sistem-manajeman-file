@@ -11,16 +11,29 @@ use Illuminate\Support\Facades\Storage; // <-- Impor Storage
 class DivisionController extends Controller
 {
     // Mengambil semua divisi beserta data tambahannya
-    public function index()
-    {
-        // Mengambil divisi beserta jumlah user dan total ukuran file terkait
-        $divisions = Division::withCount('users')
-                            ->withSum('files', 'ukuran_file')
-                            ->latest()
-                            ->get();
+public function index()
+{
+    // PERBAIKAN 1: Tambahkan 'folders' ke dalam withCount
+    $divisions = Division::withCount(['users', 'folders'])
+                    ->withSum('files', 'ukuran_file')
+                    ->latest()
+                    ->get();
 
-        return response()->json($divisions);
-    }
+    $formattedDivisions = $divisions->map(function ($division) {
+        return [
+            'id' => $division->id,
+            'name' => $division->name,
+            'users_count' => $division->users_count,
+            'files_sum_ukuran_file' => $division->files_sum_ukuran_file,
+            'storage_quota' => $division->storage_quota,
+            'folders_count' => $division->folders_count, // <-- PERBAIKAN 2: Tambahkan ini
+            'created_at' => $division->created_at,
+            'updated_at' => $division->updated_at,
+        ];
+    });
+
+    return response()->json($formattedDivisions);
+}
 
     // Menyimpan divisi baru dan membuat folder fisiknya
     public function store(Request $request)
@@ -84,4 +97,27 @@ class DivisionController extends Controller
 
         return response()->json(null, 204);
     }
+     public function updateQuota(Request $request, Division $division)
+    {
+        // Validasi input: harus ada, harus angka, dan minimal 0
+        $validator = Validator::make($request->all(), [
+            'storage_quota' => 'required|integer|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        // Update kolom storage_quota dengan data dari request
+        $division->storage_quota = $request->input('storage_quota');
+        $division->save();
+
+        return response()->json([
+            'message' => 'Batas penyimpanan untuk divisi ' . $division->name . ' berhasil diperbarui.',
+            'division' => $division
+        ]);
+    }
+
+
+    
 }

@@ -8,26 +8,32 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 class Kernel extends ConsoleKernel
 {
     /**
+     * The Artisan commands provided by your application.
+     *
+     * @var array
+     */
+    // --- 1. TAMBAHKAN BAGIAN INI UNTUK MENDAFTARKAN COMMAND BARU ---
+    protected $commands = [
+        Commands\RecordAutoLogout::class,
+    ];
+
+    /**
      * Define the application's command schedule.
      */
     protected function schedule(Schedule $schedule)
-{
-    $schedule->command('backup:run --only-files')->everyMinute();
+    {
+        // Ini adalah jadwal backup Anda yang sudah ada, jangan diubah
+        $schedule->command('backup:run --only-files')->everyMinute();
 
-    // backup setiap jam
-    // $schedule->command('backup:run --only-db')->hourly();
-    // $schedule->command('backup:run')->hourly();
-
-    // atau jika mau tiap hari jam 2 pagi:
-    // $schedule->command('backup:all')->dailyAt('02:00');
-}
+        // --- 2. TAMBAHKAN JADWAL BARU DI SINI ---
+        // Jalankan command auto-logout setiap lima menit
+        $schedule->command('app:record-auto-logout')->everyFiveMinutes();
+    }
 
     protected function scheduleTimezone()
     {
         return 'Asia/Jakarta';
     }
-
-
 
     /**
      * Register the commands for the application.

@@ -83,64 +83,88 @@ class FileController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar', // 500MB Max & tipe file aman
-            'new_name' => 'nullable|string|max:255',
-            'folder_id' => 'nullable|integer|exists:folders,id',
-        ]);
+public function store(Request $request)
+{
+    $request->validate([
+        'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar',
+        'new_name' => 'nullable|string|max:255',
+        'folder_id' => 'nullable|integer|exists:folders,id',
+    ]);
 
-        $uploadedFile = $request->file('file');
-        $originalName = $uploadedFile->getClientOriginalName();
-        $newName = $request->input('new_name');
-        $overwrite = $request->boolean('overwrite');
-        
-        $user = Auth::user();
-        $divisionId = $user->division_id;
+    $uploadedFile = $request->file('file');
+    $user = Auth::user();
 
-        $fileNameToSave = $newName ?: $originalName;
-
-        $existingFile = File::where('nama_file_asli', $fileNameToSave)
-                            ->where('division_id', $divisionId)
-                            ->first();
-
-        if ($existingFile && !$overwrite) {
-            return response()->json([
-                'message' => 'File dengan nama "'.$fileNameToSave.'" sudah ada.',
-                'status' => 'conflict'
-            ], 409);
-        }
-
-        if ($existingFile && $overwrite) {
-            Storage::delete($existingFile->path_penyimpanan);
-            $existingFile->forceDelete();
-        }
-
-        // Validasi folder_id satu divisi (jika dikirim)
-        $folderId = $request->input('folder_id');
-        if ($folderId) {
-            $folder = \App\Models\Folder::findOrFail($folderId);
-            if ($folder->division_id !== $divisionId && $user->role->name !== 'super_admin') {
-                return response()->json(['message' => 'Folder tujuan berada di divisi berbeda.'], 422);
-            }
-        }
-
-        $path = $uploadedFile->store('uploads/' . $divisionId);
-
-        $newFile = File::create([
-            'nama_file_asli' => $fileNameToSave,
-            'nama_file_tersimpan' => $uploadedFile->hashName(),
-            'path_penyimpanan' => $path,
-            'tipe_file' => $uploadedFile->getClientMimeType(),
-            'ukuran_file' => $uploadedFile->getSize(),
-            'uploader_id' => $user->id,
-            'division_id' => $divisionId,
-            'folder_id' => $folderId,
-        ]);
-
-        return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);
+    // Pastikan user reguler memiliki divisi
+    if ($user->role->name !== 'super_admin' && !$user->division_id) {
+        return response()->json(['message' => 'Anda tidak terdaftar di divisi manapun.'], 403);
     }
+    
+    $division = $user->division; // Mengambil model divisi dari user
+
+    // --- BLOK LOGIKA PENGECEKAN KUOTA DIMULAI DI SINI ---
+    // Cek hanya jika user bukan super_admin dan kuota untuk divisinya diatur (lebih dari 0)
+    if ($user->role->name !== 'super_admin' && $division->storage_quota > 0) {
+        // 1. Hitung total file yang sudah ada di divisi ini
+        $currentSize = $division->files()->sum('ukuran_file');
+        
+        // 2. Ambil ukuran file yang baru diunggah
+        $newFileSize = $uploadedFile->getSize();
+
+        // 3. Jika total ukuran lama + baru melebihi kuota, gagalkan
+        if (($currentSize + $newFileSize) > $division->storage_quota) {
+            return response()->json([
+                'message' => 'Gagal mengunggah file !!
+                 Batas penyimpanan untuk divisi Anda telah tercapai, segera hubungi admin divisi anda.'
+            ], 403); // 403 Forbidden adalah status yang tepat
+        }
+    }
+    // --- BLOK LOGIKA PENGECEKAN KUOTA SELESAI ---
+
+    $originalName = $uploadedFile->getClientOriginalName();
+    $newName = $request->input('new_name');
+    $overwrite = $request->boolean('overwrite');
+    $divisionId = $user->division_id;
+    $fileNameToSave = $newName ?: $originalName;
+
+    $existingFile = File::where('nama_file_asli', $fileNameToSave)
+                        ->where('division_id', $divisionId)
+                        ->first();
+
+    if ($existingFile && !$overwrite) {
+        return response()->json([
+            'message' => 'File dengan nama "'.$fileNameToSave.'" sudah ada.',
+            'status' => 'conflict'
+        ], 409);
+    }
+
+    if ($existingFile && $overwrite) {
+        Storage::delete($existingFile->path_penyimpanan);
+        $existingFile->forceDelete();
+    }
+
+    $folderId = $request->input('folder_id');
+    if ($folderId) {
+        $folder = \App\Models\Folder::findOrFail($folderId);
+        if ($folder->division_id !== $divisionId && $user->role->name !== 'super_admin') {
+            return response()->json(['message' => 'Folder tujuan berada di divisi berbeda.'], 422);
+        }
+    }
+
+    $path = $uploadedFile->store('uploads/' . $divisionId);
+
+    $newFile = File::create([
+        'nama_file_asli' => $fileNameToSave,
+        'nama_file_tersimpan' => $uploadedFile->hashName(),
+        'path_penyimpanan' => $path,
+        'tipe_file' => $uploadedFile->getClientMimeType(),
+        'ukuran_file' => $uploadedFile->getSize(),
+        'uploader_id' => $user->id,
+        'division_id' => $divisionId,
+        'folder_id' => $folderId,
+    ]);
+
+    return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);
+}
 
     public function recent()
     {

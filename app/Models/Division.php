@@ -17,6 +17,7 @@ class Division extends Model
      */
     protected $fillable = [
         'name',
+        'storage_quota',
     ];
 
     /**

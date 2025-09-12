@@ -114,6 +114,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Rute yang HANYA bisa diakses Super Admin
         Route::middleware('check.role:super_admin')->group(function () {
+            Route::put('/divisions/{division}/quota', [DivisionController::class, 'updateQuota']);
             Route::get('/divisions-with-stats', [SuperAdminController::class, 'getDivisionsWithStats']);
             Route::apiResource('/divisions', DivisionController::class);
             Route::get('/dashboard-stats', [DashboardController::class, 'index']);
