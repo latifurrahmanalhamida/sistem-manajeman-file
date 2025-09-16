@@ -137,7 +137,7 @@ class SuperAdminController extends Controller
 
         return response()->json(['count' => $count]);
     }
-public function purgeActivityLogs(Request $request)
+public function deleteActivityLogsByRange(Request $request)
 {
     $validated = $request->validate([
         'range' => 'required|string',
