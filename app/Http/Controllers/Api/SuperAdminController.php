@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use App\Models\LoginHistory; 
 use Carbon\Carbon; 
+use Illuminate\Support\Facades\Log;
 
 class SuperAdminController extends Controller
 {
@@ -86,9 +87,6 @@ class SuperAdminController extends Controller
         return response()->json($history);
     }
 
-    /**
-     * --- FUNGSI BARU UNTUK MEMBERSIHKAN RIWAYAT LOGIN ---
-     */
     public function purgeLoginHistory(Request $request)
     {
         // Validasi input, memastikan 'range' ada dan nilainya sesuai
@@ -139,4 +137,56 @@ class SuperAdminController extends Controller
 
         return response()->json(['count' => $count]);
     }
+public function purgeActivityLogs(Request $request)
+{
+    $validated = $request->validate([
+        'range' => 'required|string',
+    ]);
+
+    $range = $validated['range'];
+    $query = ActivityLog::query();
+
+    // Normalisasi format singkat -> panjang
+    $map = [
+        '1d' => '1_day',
+        '3d' => '3_days',
+        '1w' => '1_week',
+        '1m' => '1_month',
+        '1y' => '1_year',
+    ];
+    if (isset($map[$range])) {
+        $range = $map[$range];
+    }
+
+    // Tentukan filter berdasarkan range
+    if ($range === '1_day') {
+        $query->where('created_at', '<', Carbon::now()->subDay());
+    } elseif ($range === '3_days') {
+        $query->where('created_at', '<', Carbon::now()->subDays(3));
+    } elseif ($range === '1_week') {
+        $query->where('created_at', '<', Carbon::now()->subWeek());
+    } elseif ($range === '1_month') {
+        $query->where('created_at', '<', Carbon::now()->subMonth());
+    } elseif ($range === '1_year') {
+        $query->where('created_at', '<', Carbon::now()->subYear());
+    } elseif ($range !== 'all') {
+        return response()->json(['message' => 'Rentang waktu tidak valid.'], 400);
+    }
+
+    try {
+        $count = $query->count();
+        $query->delete();
+
+        Log::info("Successfully deleted {$count} activity logs.", ['range' => $range]);
+
+        return response()->json([
+            'message' => "Berhasil menghapus {$count} data log aktivitas."
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Error deleting activity logs: ' . $e->getMessage());
+        return response()->json(['message' => 'Gagal menghapus log aktivitas karena kesalahan server.'], 500);
+    }
+}
+
+
 }

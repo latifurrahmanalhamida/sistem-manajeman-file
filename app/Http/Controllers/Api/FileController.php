@@ -40,8 +40,17 @@ class FileController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $divisionId = $user->division_id;
         $folderId = $request->query('folder_id');
+
+        // Determine which division to show
+        $targetDivisionId = $user->division_id; // Default to user's own division
+
+        // Allow super_admin to switch division view
+        if ($user->role->name === 'super_admin' && $request->has('division_id') && $request->query('division_id') !== '') {
+            $targetDivisionId = $request->query('division_id');
+        } else {
+            $targetDivisionId = $user->division_id;
+        }
 
         // --- PERBAIKAN DI SINI: Tambahkan withSum untuk folder ---
         $foldersQuery = Folder::query()
@@ -60,9 +69,10 @@ class FileController extends Controller
                 $q->where('folder_id', $folderId);
             });
 
-        if ($user->role->name !== 'super_admin') {
-            $foldersQuery->where('division_id', $divisionId);
-            $filesQuery->where('division_id', $divisionId);
+        // Apply division filtering for all roles
+        if ($targetDivisionId) {
+            $foldersQuery->where('division_id', $targetDivisionId);
+            $filesQuery->where('division_id', $targetDivisionId);
         }
 
         $currentFolder = $folderId ? Folder::with('parent')->find($folderId) : null;
@@ -89,50 +99,64 @@ public function store(Request $request)
         'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar',
         'new_name' => 'nullable|string|max:255',
         'folder_id' => 'nullable|integer|exists:folders,id',
+        'division_id' => 'nullable|integer|exists:divisions,id', // tambahan dari superadmin-dashboard
     ]);
 
     $uploadedFile = $request->file('file');
-    $user = Auth::user();
-
-    // Pastikan user reguler memiliki divisi
-    if ($user->role->name !== 'super_admin' && !$user->division_id) {
-        return response()->json(['message' => 'Anda tidak terdaftar di divisi manapun.'], 403);
-    }
-    
-    $division = $user->division; // Mengambil model divisi dari user
-
-    // --- BLOK LOGIKA PENGECEKAN KUOTA DIMULAI DI SINI ---
-    // Cek hanya jika user bukan super_admin dan kuota untuk divisinya diatur (lebih dari 0)
-    if ($user->role->name !== 'super_admin' && $division->storage_quota > 0) {
-        // 1. Hitung total file yang sudah ada di divisi ini
-        $currentSize = $division->files()->sum('ukuran_file');
-        
-        // 2. Ambil ukuran file yang baru diunggah
-        $newFileSize = $uploadedFile->getSize();
-
-        // 3. Jika total ukuran lama + baru melebihi kuota, gagalkan
-        if (($currentSize + $newFileSize) > $division->storage_quota) {
-            return response()->json([
-                'message' => 'Gagal mengunggah file !!
-                 Batas penyimpanan untuk divisi Anda telah tercapai, segera hubungi admin divisi anda.'
-            ], 403); // 403 Forbidden adalah status yang tepat
-        }
-    }
-    // --- BLOK LOGIKA PENGECEKAN KUOTA SELESAI ---
-
     $originalName = $uploadedFile->getClientOriginalName();
     $newName = $request->input('new_name');
     $overwrite = $request->boolean('overwrite');
-    $divisionId = $user->division_id;
+    $folderId = $request->input('folder_id');
+
+    $user = Auth::user();
+
+    // --- LOGIKA DIVISION ID ---
+    $divisionId = null;
+    if ($user->role->name === 'super_admin') {
+        if ($folderId) {
+            $folder = Folder::find($folderId);
+            if ($folder) {
+                $divisionId = $folder->division_id;
+            }
+        } elseif ($request->has('division_id')) {
+            $divisionId = $request->input('division_id');
+        }
+    } else {
+        if (!$user->division_id) {
+            return response()->json(['message' => 'Anda tidak terdaftar di divisi manapun.'], 403);
+        }
+        $divisionId = $user->division_id;
+    }
+
+    if (is_null($divisionId)) {
+        return response()->json(['message' => 'Gagal menentukan divisi untuk file ini.'], 422);
+    }
+
+    $division = Division::find($divisionId);
+
+    // --- CEK KUOTA ---
+    if ($user->role->name !== 'super_admin' && $division && $division->storage_quota > 0) {
+        $currentSize = $division->files()->sum('ukuran_file');
+        $newFileSize = $uploadedFile->getSize();
+
+        if (($currentSize + $newFileSize) > $division->storage_quota) {
+            return response()->json([
+                'message' => 'Gagal mengunggah file !! Batas penyimpanan untuk divisi Anda telah tercapai, segera hubungi admin divisi anda.'
+            ], 403);
+        }
+    }
+
+    // --- LOGIKA SIMPAN FILE ---
     $fileNameToSave = $newName ?: $originalName;
 
     $existingFile = File::where('nama_file_asli', $fileNameToSave)
-                        ->where('division_id', $divisionId)
-                        ->first();
+        ->where('division_id', $divisionId)
+        ->where('folder_id', $folderId)
+        ->first();
 
     if ($existingFile && !$overwrite) {
         return response()->json([
-            'message' => 'File dengan nama "'.$fileNameToSave.'" sudah ada.',
+            'message' => 'File dengan nama "' . $fileNameToSave . '" sudah ada di lokasi ini.',
             'status' => 'conflict'
         ], 409);
     }
@@ -142,11 +166,10 @@ public function store(Request $request)
         $existingFile->forceDelete();
     }
 
-    $folderId = $request->input('folder_id');
     if ($folderId) {
-        $folder = \App\Models\Folder::findOrFail($folderId);
-        if ($folder->division_id !== $divisionId && $user->role->name !== 'super_admin') {
-            return response()->json(['message' => 'Folder tujuan berada di divisi berbeda.'], 422);
+        $folder = Folder::find($folderId);
+        if ($folder && $folder->division_id != $divisionId) {
+            return response()->json(['message' => 'Folder tujuan tidak cocok dengan divisi yang dipilih.'], 422);
         }
     }
 
