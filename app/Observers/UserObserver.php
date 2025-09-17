@@ -21,6 +21,7 @@ class UserObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Membuat Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -31,10 +32,6 @@ class UserObserver
         ]);
     }
 
-    /**
-     * --- FUNGSI INI TELAH DIPERBARUI SECARA TOTAL ---
-     * Handle the User "updated" event with detailed change logging.
-     */
     public function updated(User $user): void
     {
         // Ambil semua perubahan
@@ -83,6 +80,7 @@ class UserObserver
 
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Mengubah Data Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -102,6 +100,7 @@ class UserObserver
 
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Menghapus Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -119,6 +118,7 @@ class UserObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Memulihkan Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -136,6 +136,7 @@ class UserObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Menghapus Pengguna Permanen',
             'target_type' => get_class($user),
             'target_id'   => $user->id,

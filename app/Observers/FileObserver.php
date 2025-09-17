@@ -21,6 +21,7 @@ class FileObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $file->division_id,
             'action'      => 'Mengunggah File',
             'target_type' => get_class($file),
             'target_id'   => $file->id,
@@ -43,6 +44,7 @@ public function updated(File $file): void
             
             ActivityLog::create([
                 'user_id'     => Auth::id(),
+                'division_id' => $file->division_id,
                 'action'      => 'Mengubah Nama File',
                 'target_type' => get_class($file),
                 'target_id'   => $file->id,
@@ -63,6 +65,7 @@ public function updated(File $file): void
 
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $file->division_id,
             'action'      => 'Menghapus File',
             'target_type' => get_class($file),
             'target_id'   => $file->id,
@@ -78,6 +81,7 @@ public function updated(File $file): void
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $file->division_id,
             'action'      => 'Memulihkan File',
             'target_type' => get_class($file),
             'target_id'   => $file->id,
@@ -93,6 +97,7 @@ public function updated(File $file): void
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $file->division_id,
             'action'      => 'Menghapus File Permanen',
             'target_type' => get_class($file),
             'target_id'   => $file->id,

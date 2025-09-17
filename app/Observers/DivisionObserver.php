@@ -14,6 +14,7 @@ class DivisionObserver
     {
         ActivityLog::create([
             'user_id' => Auth::id(),
+            'division_id' => $division->id,
             'action' => 'Membuat Divisi',
             'target_type' => get_class($division),
             'target_id' => $division->id,
@@ -62,6 +63,7 @@ public function updated(Division $division): void
 
         ActivityLog::create([
             'user_id' => Auth::id(),
+            'division_id' => $division->id,
             'action' => 'Mengubah Divisi',
             'target_type' => get_class($division),
             'target_id' => $division->id,
@@ -86,6 +88,7 @@ private function formatBytes($bytes, $precision = 2): string
     {
         ActivityLog::create([
             'user_id' => Auth::id(),
+            'division_id' => $division->id,
             'action' => 'Menghapus Divisi',
             'target_type' => get_class($division),
             'target_id' => $division->id,

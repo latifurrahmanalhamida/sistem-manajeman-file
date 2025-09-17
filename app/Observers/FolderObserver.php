@@ -18,6 +18,7 @@ class FolderObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Membuat Folder',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
@@ -36,6 +37,7 @@ class FolderObserver
         if ($folder->isDirty('name')) {
             ActivityLog::create([
                 'user_id'     => Auth::id(),
+                'division_id' => $folder->division_id,
                 'action'      => 'Mengubah Nama Folder',
                 'target_type' => get_class($folder),
                 'target_id'   => $folder->id,
@@ -53,6 +55,7 @@ class FolderObserver
 
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Menghapus Folder',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
@@ -65,6 +68,7 @@ class FolderObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Memulihkan Folder',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
@@ -77,6 +81,7 @@ class FolderObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Menghapus Folder Permanen',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
