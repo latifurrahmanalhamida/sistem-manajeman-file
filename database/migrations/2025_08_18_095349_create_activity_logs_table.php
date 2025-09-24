@@ -14,6 +14,7 @@ return new class extends Migration
     Schema::create('activity_logs', function (Blueprint $table) {
         $table->id();
         $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
+        $table->foreignId('division_id')->nullable()->constrained('divisions')->onDelete('cascade');
         $table->string('action'); // Contoh: 'Membuat Pengguna', 'Mengunggah File'
         $table->morphs('target'); // Kolom untuk target (bisa User, File, Divisi, dll.)
         $table->json('details')->nullable(); // Untuk detail tambahan

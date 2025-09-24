@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Folder;
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -356,5 +357,53 @@ public function trashed(Request $request)
 
         // Jumlahkan ukuran semua file yang ada di dalam folder-folder tersebut
         return \App\Models\File::whereIn('folder_id', $allFolderIds)->sum('ukuran_file');
+    }
+
+    public function getDivisionLogs(Request $request)
+    {
+        $user = Auth::user();
+
+        // The route middleware already protects this, but an extra check is good.
+        if ($user->role->name !== 'admin_devisi' && $user->role->name !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $query = ActivityLog::with('user:id,name');
+
+        if ($user->role->name === 'admin_devisi') {
+            $query->where('division_id', $user->division_id);
+        }
+        // For super_admin, if division_id is provided, filter by it.
+        elseif ($user->role->name === 'super_admin' && $request->has('division_id')) {
+            $query->where('division_id', $request->input('division_id'));
+        }
+        // If super_admin and no division_id, it will fetch all logs.
+
+        $logs = $query->latest()->paginate(20);
+
+        // We need to transform the output to match what the frontend expects.
+        // The frontend expects: causer.name, description, properties.details
+        // Our model provides: user.name, action, details
+        $transformedLogs = $logs->getCollection()->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'causer' => $log->user, // The frontend wants a 'causer' object with a 'name' property. $log->user should work.
+                'description' => $log->action, // We'll map 'action' to 'description'.
+                'properties' => ['details' => $log->details], // We'll wrap 'details' inside a 'properties' object.
+                'created_at' => $log->created_at->toIso8601String(),
+                'updated_at' => $log->updated_at->toIso8601String(),
+            ];
+        });
+
+        // Create a new paginator instance with the transformed items.
+        $paginatedResult = new \Illuminate\Pagination\LengthAwarePaginator(
+            $transformedLogs,
+            $logs->total(),
+            $logs->perPage(),
+            $logs->currentPage(),
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return response()->json($paginatedResult);
     }
 }

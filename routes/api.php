@@ -68,6 +68,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/folders/{id}/restore', [FolderController::class, 'restore']);
             Route::delete('/folders/{id}/force', [FolderController::class, 'forceDelete']);
             Route::apiResource('/folders', FolderController::class);
+
+            // Route untuk admin devisi melihat log aktivitas divisinya
+            Route::get('/activity-logs/division', [FolderController::class, 'getDivisionLogs']);
         });
 
         // Rute yang HANYA bisa diakses Super Admin
