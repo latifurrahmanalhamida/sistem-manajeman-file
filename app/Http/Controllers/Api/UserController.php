@@ -11,7 +11,7 @@ use App\Models\Division;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule; // [TAMBAHAN] Import Rule
 
 class UserController extends Controller
 {
@@ -38,6 +38,7 @@ class UserController extends Controller
 
     /**
      * Menyimpan user baru.
+     * --- FUNGSI INI TELAH DIPERBARUI ---
      */
     public function store(Request $request)
     {
@@ -47,23 +48,52 @@ class UserController extends Controller
             return response()->json(['message' => 'Anda tidak memiliki izin untuk membuat user.'], 403);
         }
 
+        // [MODIFIKASI] Penyesuaian aturan validasi
         $rules = [
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8',
-            'nipp' => 'nullable|string|unique:users,nipp',
-            'username' => 'nullable|string|unique:users,username',
+            'nipp' => 'required|numeric|digits_between:5,20|unique:users,nipp',
+            'username' => [
+                'required',
+                'string',
+                'min:3',
+                'max:50',
+                'unique:users,username',
+                'regex:/^[a-z0-9_.]+$/', // Hanya huruf kecil, angka, underscore, titik
+                'not_regex:/^[._]|.*[._]$/' // Tidak boleh diawali atau diakhiri _ atau .
+            ],
         ];
 
         if ($admin->role->name === 'super_admin') {
             $rules['role_id'] = 'required|exists:roles,id';
-            $rules['division_id'] = 'required|exists:divisions,id';
+            // [MODIFIKASI] Divisi hanya wajib jika role BUKAN super_admin
+            $selectedRole = Role::find($request->role_id);
+            if ($selectedRole && $selectedRole->name !== 'super_admin') {
+                 $rules['division_id'] = 'required|exists:divisions,id';
+            } else {
+                 $rules['division_id'] = 'nullable|exists:divisions,id';
+            }
         }
 
-        $validator = Validator::make($request->all(), $rules);
+        // [MODIFIKASI] Pesan validasi kustom
+        $messages = [
+            'nipp.required' => 'NIPP wajib diisi.',
+            'nipp.numeric' => 'NIPP harus berupa angka.',
+            'nipp.digits_between' => 'NIPP harus terdiri dari 5 hingga 20 digit.',
+            'nipp.unique' => 'NIPP ini sudah terdaftar.',
+            'username.required' => 'Username wajib diisi.',
+            'username.unique' => 'Username ini sudah digunakan.',
+            'username.regex' => 'Username hanya boleh berisi huruf kecil, angka, underscore, dan titik.',
+            'username.not_regex' => 'Username tidak boleh diawali atau diakhiri dengan titik atau underscore.',
+            'email.unique' => 'Email ini sudah terdaftar.',
+        ];
+
+        $validator = Validator::make($request->all(), $rules, $messages);
 
         if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
+            // Mengembalikan error dalam format { "errors": { "field": ["message"] } }
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
         $roleId = null;
@@ -71,7 +101,9 @@ class UserController extends Controller
 
         if ($admin->role->name === 'super_admin') {
             $roleId = $request->role_id;
-            $divisionId = $request->division_id;
+            $selectedRole = Role::find($roleId);
+            // [MODIFIKASI] Jika super_admin, division_id di-null-kan
+            $divisionId = ($selectedRole && $selectedRole->name === 'super_admin') ? null : $request->division_id;
         } else { // Admin Devisi
             $userRole = Role::where('name', 'user_devisi')->first();
             $roleId = $userRole->id;
@@ -91,7 +123,7 @@ class UserController extends Controller
         return response()->json(['message' => 'User berhasil dibuat.', 'user' => $user->load('role', 'division')], 201);
     }
 
-    /**
+     /**
      * Menampilkan satu data user spesifik.
      */
     public function show(User $user)
@@ -105,55 +137,76 @@ class UserController extends Controller
 
     /**
      * Memperbarui data user.
-     * --- FUNGSI INI TELAH DIPERBAIKI ---
+     * --- FUNGSI INI TELAH DIPERBARUI ---
      */
-public function update(Request $request, User $user)
-{
-    $admin = Auth::user();
-    if ($admin->role->name === 'admin_devisi' && $admin->division_id !== $user->division_id) {
-        return response()->json(['message' => 'Akses ditolak.'], 403);
+    public function update(Request $request, User $user)
+    {
+        $admin = Auth::user();
+        if ($admin->role->name === 'admin_devisi' && $admin->division_id !== $user->division_id) {
+            return response()->json(['message' => 'Akses ditolak.'], 403);
+        }
+        
+        // [MODIFIKASI] Penyesuaian aturan validasi
+        $rules = [
+            'name' => 'required|string|max:255',
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
+            'nipp' => ['required', 'numeric', 'digits_between:5,20', Rule::unique('users')->ignore($user->id)],
+            'username' => [
+                'required',
+                'string',
+                'min:3',
+                'max:50',
+                Rule::unique('users')->ignore($user->id),
+                'regex:/^[a-z0-9_.]+$/',
+                'not_regex:/^[._]|.*[._]$/'
+            ],
+        ];
+
+        if ($request->filled('password')) {
+            $rules['password'] = 'sometimes|required|string|min:8';
+        }
+
+        if ($admin->role->name === 'super_admin') {
+            $rules['role_id'] = 'required|exists:roles,id';
+            $selectedRole = Role::find($request->role_id);
+            if ($selectedRole && $selectedRole->name !== 'super_admin') {
+                 $rules['division_id'] = 'required|exists:divisions,id';
+            } else {
+                 $rules['division_id'] = 'nullable|exists:divisions,id';
+            }
+        }
+
+        $messages = [
+            // (Pesan kustom sama seperti di fungsi store)
+            'nipp.unique' => 'NIPP ini sudah terdaftar.',
+            'username.unique' => 'Username ini sudah digunakan.',
+            'email.unique' => 'Email ini sudah terdaftar.',
+        ];
+
+        $validator = Validator::make($request->all(), $rules, $messages);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $dataToUpdate = $request->only(['name', 'email', 'nipp', 'username']);
+
+        if ($request->filled('password')) {
+            $dataToUpdate['password'] = Hash::make($request->password);
+        }
+
+        if ($admin->role->name === 'super_admin') {
+            $dataToUpdate['role_id'] = $request->role_id;
+            $selectedRole = Role::find($request->role_id);
+            $dataToUpdate['division_id'] = ($selectedRole && $selectedRole->name === 'super_admin') ? null : $request->division_id;
+        }
+
+        $user->update($dataToUpdate);
+
+        return response()->json(['message' => 'User berhasil diperbarui.', 'user' => $user->load('role', 'division')]);
     }
-
-    $rules = [
-        'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
-        'nipp' => 'nullable|string|unique:users,nipp,' . $user->id,
-        'username' => 'nullable|string|unique:users,username,' . $user->id,
-    ];
-
-    // Tambahkan validasi password HANYA JIKA diisi
-    if ($request->filled('password')) {
-        $rules['password'] = 'required|string|min:8';
-    }
-
-    if ($admin->role->name === 'super_admin') {
-        $rules['role_id'] = 'required|exists:roles,id';
-        $rules['division_id'] = 'required|exists:divisions,id';
-    }
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return response()->json($validator->errors(), 422);
-    }
-
-    $dataToUpdate = $request->only(['name', 'email', 'nipp', 'username']);
-
-    // Jika ada password baru, hash dan tambahkan ke data update
-    if ($request->filled('password')) {
-        $dataToUpdate['password'] = Hash::make($request->password);
-    }
-
-    if ($admin->role->name === 'super_admin') {
-        $dataToUpdate['role_id'] = $request->role_id;
-        $dataToUpdate['division_id'] = $request->division_id;
-    }
-
-    $user->update($dataToUpdate);
-
-    return response()->json(['message' => 'User berhasil diperbarui.', 'user' => $user->load('role', 'division')]);
-}
-
+    
+    // ... sisa fungsi (destroy, restore, etc.) tetap sama ...
     /**
      * Menghapus user.
      */
