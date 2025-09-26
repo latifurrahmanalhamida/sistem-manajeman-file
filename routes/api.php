@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BackupController;
+use App\Http\Controllers\Api\BackupScheduleController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\Admin\DivisionController;
 use App\Http\Controllers\Api\UserController;
@@ -15,7 +17,7 @@ Route::post('/login', [AuthController::class, 'login']);
 
 // Grup Rute Terotentikasi
 Route::middleware('auth:sanctum')->group(function () {
-    
+
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
@@ -35,6 +37,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/restore', [FileController::class, 'restore']);
     Route::delete('/force', [FileController::class, 'forceDelete']);
     });
+
+   Route::prefix('backup')->group(function () {
+    Route::post('/run', [BackupController::class, 'run']);
+    Route::get('/list', [BackupController::class, 'index']);
+    Route::get('/settings', [BackupController::class, 'getSettings']);
+    Route::post('/settings', [BackupController::class, 'updateSettings']);
+    Route::get('/schedule', [BackupController::class, 'getSchedule']);
+    Route::post('/schedule', [BackupController::class, 'updateSchedule']);
+    Route::get('download/{id}', [BackupController::class, 'download']);
+    Route::delete('{id}', [BackupController::class, 'destroy']);     
+});
 
     // --- GRUP RUTE ADMIN (/api/admin/...) ---
     Route::prefix('admin')->group(function() {
@@ -65,4 +78,4 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
 
-}); 
+});
