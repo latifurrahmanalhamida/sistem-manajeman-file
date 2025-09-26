@@ -58,23 +58,14 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
-            // 'options' => extension_loaded('pdo_mysql') ? array_filter([
-            //     PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            // ]) : [],
-        //     'dump' => [
-        //     'dump_binary_path' => env('DB_DUMP_PATH', ''), // misal '/usr/bin'
-        //     'use_single_transaction',
-        // ],
-        // Tambahan untuk spatie/laravel-backup
-        'dump' => [
-        'dump_binary_path' => env('DB_DUMP_PATH', ''), // otomatis ambil dari .env
-        'use_single_transaction',
-        'timeout' => 60,
-            // 'exclude_tables' => ['nama_tabel_1', 'nama_tabel_2'],
-            // 'do_not_use_column_statistics' => true,
-            // 'set_gtid_purged' => 'OFF',
-        ],
-
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+            'dump' => [
+            'dump_binary_path' => env('MYSQL_DUMP_PATH', ''), // path mysqldump
+            'use_single_transaction',
+            'timeout' => 60,
+    ],
         ],
 
         'pgsql' => [
@@ -139,7 +130,7 @@ return [
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
-            'prefix' => env('REDIS_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_').'_database_'),
+            'prefix' => env('REDIS_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '').'_database'),
         ],
 
         'default' => [

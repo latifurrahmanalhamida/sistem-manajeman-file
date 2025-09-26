@@ -22,17 +22,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Ini adalah jadwal backup Anda yang sudah ada, jangan diubah
-        $schedule->command('backup:run --only-files')->everyMinute();
-
-        // --- 2. TAMBAHKAN JADWAL BARU DI SINI ---
-        // Jalankan command auto-logout setiap lima menit
-        $schedule->command('app:record-auto-logout')->everyFiveMinutes();
-    }
-
-    protected function scheduleTimezone()
-    {
-        return 'Asia/Jakarta';
+        // $schedule->command('inspire')->hourly();
+        $schedule->command('system:backup-check')->everyMinute();
     }
 
     /**

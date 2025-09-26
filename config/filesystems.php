@@ -36,19 +36,11 @@ return [
             'throw' => false,
         ],
 
-        'backup_all' => [
-        'driver' => 'local',
-        'root' => 'D:/Backup/All', // lokasi backup file dan database
-        ],
-
         'backup_disk' => [
-            'driver' => 'local',
-            'root' => 'D:/Backup/Files',  // lokasi baru
-            ],
-    // 'backup_disk' => [
-    // 'driver' => 'local',
-    // 'root' => 'C:/BackupProject',  // lokasi baru
-    //     ],
+        'driver' => 'local',
+        'root' => env('BACKUP_PATH', storage_path('app/backups')),
+        'throw' => false,
+    ],
 
         'public' => [
             'driver' => 'local',
@@ -78,7 +70,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may configure the symbolic links that will be created when the
-    | `storage:link` Artisan command is executed. The array keys should be
+    | storage:link Artisan command is executed. The array keys should be
     | the locations of the links and the values should be their targets.
     |
     */

@@ -3,11 +3,12 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BackupController;
+use App\Http\Controllers\Api\BackupScheduleController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\Admin\DivisionController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\Admin\DashboardController;
-use App\Http\Controllers\Api\BackupController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Role;
@@ -50,6 +51,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/users', [BackupController::class, 'backupUsersTable']);
     });
 
+   Route::prefix('backup')->group(function () {
+    Route::post('/run', [BackupController::class, 'run']);
+    Route::get('/list', [BackupController::class, 'index']);
+    Route::get('/settings', [BackupController::class, 'getSettings']);
+    Route::post('/settings', [BackupController::class, 'updateSettings']);
+    Route::get('/schedule', [BackupController::class, 'getSchedule']);
+    Route::post('/schedule', [BackupController::class, 'updateSchedule']);
+    Route::get('download/{id}', [BackupController::class, 'download']);
+    Route::delete('{id}', [BackupController::class, 'destroy']);     
+});
+
     // --- GRUP RUTE ADMIN (/api/admin/...) ---
     Route::prefix('admin')->group(function () {
 
@@ -90,4 +102,5 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/login-history/count-purge', [SuperAdminController::class, 'countLoginHistoryForPurge']);
         });
     });
+
 });
