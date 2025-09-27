@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\File;
 use App\Models\Folder;
+use App\Models\Division; 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -34,13 +35,23 @@ class FileController extends Controller
         }
         $file->nama_file_asli = $newName;
         $file->save();
+        $file->load('uploader:id,name');
         return response()->json(['message' => 'Nama file berhasil diubah.', 'file' => $file]);
     }
     public function index(Request $request)
     {
         $user = Auth::user();
-        $divisionId = $user->division_id;
         $folderId = $request->query('folder_id');
+
+        // Determine which division to show
+        $targetDivisionId = $user->division_id; // Default to user's own division
+
+        // Allow super_admin to switch division view
+        if ($user->role->name === 'super_admin' && $request->has('division_id') && $request->query('division_id') !== '') {
+            $targetDivisionId = $request->query('division_id');
+        } else {
+            $targetDivisionId = $user->division_id;
+        }
 
         // --- PERBAIKAN DI SINI: Tambahkan withSum untuk folder ---
         $foldersQuery = Folder::query()
@@ -59,9 +70,10 @@ class FileController extends Controller
                 $q->where('folder_id', $folderId);
             });
 
-        if ($user->role->name !== 'super_admin') {
-            $foldersQuery->where('division_id', $divisionId);
-            $filesQuery->where('division_id', $divisionId);
+        // Apply division filtering for all roles
+        if ($targetDivisionId) {
+            $foldersQuery->where('division_id', $targetDivisionId);
+            $filesQuery->where('division_id', $targetDivisionId);
         }
 
         $currentFolder = $folderId ? Folder::with('parent')->find($folderId) : null;
@@ -82,64 +94,101 @@ class FileController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar', // 500MB Max & tipe file aman
-            'new_name' => 'nullable|string|max:255',
-            'folder_id' => 'nullable|integer|exists:folders,id',
-        ]);
+public function store(Request $request)
+{
+    $request->validate([
+        'file' => 'required|file|max:512000|mimes:mp4,mp3,wav,csv,xml,json,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar',
+        'new_name' => 'nullable|string|max:255',
+        'folder_id' => 'nullable|integer|exists:folders,id',
+        'division_id' => 'nullable|integer|exists:divisions,id', // tambahan dari superadmin-dashboard
+    ]);
 
-        $uploadedFile = $request->file('file');
-        $originalName = $uploadedFile->getClientOriginalName();
-        $newName = $request->input('new_name');
-        $overwrite = $request->boolean('overwrite');
-        
-        $user = Auth::user();
-        $divisionId = $user->division_id;
+    $uploadedFile = $request->file('file');
+    $originalName = $uploadedFile->getClientOriginalName();
+    $newName = $request->input('new_name');
+    $overwrite = $request->boolean('overwrite');
+    $folderId = $request->input('folder_id');
 
-        $fileNameToSave = $newName ?: $originalName;
+    $user = Auth::user();
 
-        $existingFile = File::where('nama_file_asli', $fileNameToSave)
-                            ->where('division_id', $divisionId)
-                            ->first();
-
-        if ($existingFile && !$overwrite) {
-            return response()->json([
-                'message' => 'File dengan nama "'.$fileNameToSave.'" sudah ada.',
-                'status' => 'conflict'
-            ], 409);
-        }
-
-        if ($existingFile && $overwrite) {
-            Storage::delete($existingFile->path_penyimpanan);
-            $existingFile->forceDelete();
-        }
-
-        // Validasi folder_id satu divisi (jika dikirim)
-        $folderId = $request->input('folder_id');
+    // --- LOGIKA DIVISION ID ---
+    $divisionId = null;
+    if ($user->role->name === 'super_admin') {
         if ($folderId) {
-            $folder = \App\Models\Folder::findOrFail($folderId);
-            if ($folder->division_id !== $divisionId && $user->role->name !== 'super_admin') {
-                return response()->json(['message' => 'Folder tujuan berada di divisi berbeda.'], 422);
+            $folder = Folder::find($folderId);
+            if ($folder) {
+                $divisionId = $folder->division_id;
             }
+        } elseif ($request->has('division_id')) {
+            $divisionId = $request->input('division_id');
         }
-
-        $path = $uploadedFile->store('uploads/' . $divisionId);
-
-        $newFile = File::create([
-            'nama_file_asli' => $fileNameToSave,
-            'nama_file_tersimpan' => $uploadedFile->hashName(),
-            'path_penyimpanan' => $path,
-            'tipe_file' => $uploadedFile->getClientMimeType(),
-            'ukuran_file' => $uploadedFile->getSize(),
-            'uploader_id' => $user->id,
-            'division_id' => $divisionId,
-            'folder_id' => $folderId,
-        ]);
-
-        return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);
+    } else {
+        if (!$user->division_id) {
+            return response()->json(['message' => 'Anda tidak terdaftar di divisi manapun.'], 403);
+        }
+        $divisionId = $user->division_id;
     }
+
+    if (is_null($divisionId)) {
+        return response()->json(['message' => 'Gagal menentukan divisi untuk file ini.'], 422);
+    }
+
+    $division = Division::find($divisionId);
+
+    // --- CEK KUOTA ---
+    if ($user->role->name !== 'super_admin' && $division && $division->storage_quota > 0) {
+        $currentSize = $division->files()->sum('ukuran_file');
+        $newFileSize = $uploadedFile->getSize();
+
+        if (($currentSize + $newFileSize) > $division->storage_quota) {
+            return response()->json([
+                'message' => 'Gagal mengunggah file !! Batas penyimpanan untuk divisi Anda telah tercapai, segera hubungi admin divisi anda.'
+            ], 403);
+        }
+    }
+
+    // --- LOGIKA SIMPAN FILE ---
+    $fileNameToSave = $newName ?: $originalName;
+
+    $existingFile = File::where('nama_file_asli', $fileNameToSave)
+        ->where('division_id', $divisionId)
+        ->where('folder_id', $folderId)
+        ->first();
+
+    if ($existingFile && !$overwrite) {
+        return response()->json([
+            'message' => 'File dengan nama "' . $fileNameToSave . '" sudah ada di lokasi ini.',
+            'status' => 'conflict'
+        ], 409);
+    }
+
+    if ($existingFile && $overwrite) {
+        Storage::delete($existingFile->path_penyimpanan);
+        $existingFile->forceDelete();
+    }
+
+    if ($folderId) {
+        $folder = Folder::find($folderId);
+        if ($folder && $folder->division_id != $divisionId) {
+            return response()->json(['message' => 'Folder tujuan tidak cocok dengan divisi yang dipilih.'], 422);
+        }
+    }
+
+    $path = $uploadedFile->store('uploads/' . $divisionId);
+
+    $newFile = File::create([
+        'nama_file_asli' => $fileNameToSave,
+        'nama_file_tersimpan' => $uploadedFile->hashName(),
+        'path_penyimpanan' => $path,
+        'tipe_file' => $uploadedFile->getClientMimeType(),
+        'ukuran_file' => $uploadedFile->getSize(),
+        'uploader_id' => $user->id,
+        'division_id' => $divisionId,
+        'folder_id' => $folderId,
+    ]);
+
+    return response()->json(['message' => 'File berhasil diunggah.', 'file' => $newFile], 201);
+}
 
     public function recent()
     {

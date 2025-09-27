@@ -21,6 +21,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        \Illuminate\Http\Middleware\HandleCors::class,
     ];
 
     /**
@@ -44,6 +45,7 @@ class Kernel extends HttpKernel
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \Illuminate\Session\Middleware\StartSession::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Http\Middleware\HandleCors::class,
         ],
         // 'api' => [
         //     \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class, // Tambahkan ini
@@ -73,4 +75,10 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'check.role' => \App\Http\Middleware\CheckRole::class,
     ];
+
+    protected $commands = [
+        \App\Console\Commands\BackupSystem::class,
+    ];
+
+
 }

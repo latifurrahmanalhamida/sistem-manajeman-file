@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Folder;
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -14,35 +15,45 @@ class FolderController extends Controller
      * Tampilkan daftar folder berdasarkan parent dan divisi pengguna.
      * Query param: parent_id (nullable untuk root)
      */
-    public function index(Request $request)
+public function index(Request $request)
     {
         $user = Auth::user();
-
         $parentId = $request->input('parent_id');
-        if ($parentId === '') {
-            $parentId = null;
-        }
+        if ($parentId === '') $parentId = null;
 
         $query = Folder::with('user:id,name')
-            ->withSum('files', 'ukuran_file')
             ->when(is_null($parentId), function ($q) {
                 $q->whereNull('parent_folder_id');
             }, function ($q) use ($parentId) {
                 $q->where('parent_folder_id', $parentId);
             });
 
-        if ($user->role->name !== 'super_admin') {
+        if ($user->role->name === 'super_admin') {
+            if ($request->has('division_id')) {
+                $query->where('division_id', $request->input('division_id'));
+            }
+        } else {
             $query->where('division_id', $user->division_id);
         }
 
-        return response()->json($query->latest()->get());
+        // --- MODIFIKASI PERHITUNGAN UKURAN ---
+        $folders = $query->latest()->get();
+
+        // Loop setiap folder untuk menghitung ukuran rekursifnya
+        $folders->each(function ($folder) {
+            // Buat properti baru untuk menyimpan total ukuran
+            $folder->files_sum_ukuran_file = $this->calculateRecursiveSize($folder);
+        });
+        // --- SELESAI MODIFIKASI ---
+
+        return response()->json($folders);
     }
 
     /**
      * Simpan folder baru.
      * Body: name (required), parent_id (nullable)
      */
-    public function store(Request $request)
+public function store(Request $request)
     {
         $user = Auth::user();
         $this->authorize('create', Folder::class);
@@ -50,18 +61,25 @@ class FolderController extends Controller
         if ($parentId === '') {
             $parentId = null;
         }
-
-        // Normalisasi parent_id di request agar validasi konsisten
         $request->merge(['parent_id' => $parentId]);
+        
+        // --- MODIFIKASI DIMULAI DI SINI ---
+        $divisionId = null;
+
+        if ($user->role->name === 'super_admin') {
+            // Jika super_admin, division_id wajib ada di request
+            $request->validate(['division_id' => ['required', 'integer', Rule::exists('divisions', 'id')]]);
+            $divisionId = $request->input('division_id');
+        } else {
+            // Jika bukan super_admin, gunakan division_id milik user
+            $divisionId = $user->division_id;
+        }
 
         $validated = $request->validate([
             'name' => [
-                'required',
-                'string',
-                'max:255',
-                // Unik pada kombinasi (division_id, parent_folder_id, deleted_at null)
-                Rule::unique('folders', 'name')->where(function ($q) use ($user, $parentId) {
-                    return $q->where('division_id', $user->division_id)
+                'required', 'string', 'max:255',
+                Rule::unique('folders', 'name')->where(function ($q) use ($divisionId, $parentId) {
+                    return $q->where('division_id', $divisionId) // Gunakan divisionId yang sudah ditentukan
                              ->where('parent_folder_id', $parentId)
                              ->whereNull('deleted_at');
                 }),
@@ -69,7 +87,6 @@ class FolderController extends Controller
             'parent_id' => ['nullable', 'integer', Rule::exists('folders', 'id')],
         ]);
 
-        // Validasi parent (jika ada) harus berada pada divisi yang sama (kecuali super_admin)
         if ($parentId) {
             $parent = Folder::findOrFail($parentId);
             if ($user->role->name !== 'super_admin' && $parent->division_id !== $user->division_id) {
@@ -79,10 +96,11 @@ class FolderController extends Controller
 
         $folder = Folder::create([
             'name' => $validated['name'],
-            'division_id' => $user->division_id,
+            'division_id' => $divisionId, // Gunakan divisionId yang sudah ditentukan
             'user_id' => $user->id,
             'parent_folder_id' => $parentId,
         ]);
+        // --- MODIFIKASI SELESAI ---
 
         return response()->json([
             'message' => 'Folder berhasil dibuat.',
@@ -198,24 +216,30 @@ class FolderController extends Controller
     /**
      * Daftar folder yang berada di sampah (soft-deleted)
      */
-    public function trashed(Request $request)
+public function trashed(Request $request)
     {
         $user = Auth::user();
-        $query = Folder::onlyTrashed()
-            ->with('user:id,name')
-            ->withSum('files', 'ukuran_file');
+        $query = Folder::onlyTrashed()->with('user:id,name');
 
-        if ($user->role->name !== 'super_admin') {
+        if ($user->role->name === 'super_admin') {
+            if ($request->has('division_id')) {
+                $query->where('division_id', $request->input('division_id'));
+            }
+        } else {
             $query->where('division_id', $user->division_id);
         }
 
-        return response()->json($query->latest()->get());
-    }
+        // --- MODIFIKASI PERHITUNGAN UKURAN ---
+        $folders = $query->latest()->get();
 
-    /**
-     * Pulihkan folder dari sampah.
-     * Dukung opsi new_name (rename saat restore) dan overwrite (boolean) untuk konflik nama.
-     */
+        // Loop setiap folder untuk menghitung ukuran rekursifnya
+        $folders->each(function ($folder) {
+            $folder->files_sum_ukuran_file = $this->calculateRecursiveSize($folder);
+        });
+        // --- SELESAI MODIFIKASI ---
+
+        return response()->json($folders);
+    }
     public function restore(Request $request, $id)
     {
         $folder = Folder::onlyTrashed()->findOrFail($id);
@@ -312,5 +336,74 @@ class FolderController extends Controller
         $folder->children()->onlyTrashed()->get()->each(function ($child) {
             $this->restoreRecursively($child);
         });
+    }
+    private function getDescendantFolderIds(Folder $folder)
+    {
+        $descendantIds = collect();
+        foreach ($folder->children as $child) {
+            $descendantIds->push($child->id);
+            // Panggil fungsi ini lagi untuk anak dari anak (cucu, dst.)
+            $descendantIds = $descendantIds->merge($this->getDescendantFolderIds($child));
+        }
+        return $descendantIds;
+    }
+
+    private function calculateRecursiveSize(Folder $folder)
+    {
+        // Ambil semua ID sub-folder
+        $allFolderIds = $this->getDescendantFolderIds($folder);
+        // Tambahkan ID folder itu sendiri
+        $allFolderIds->push($folder->id);
+
+        // Jumlahkan ukuran semua file yang ada di dalam folder-folder tersebut
+        return \App\Models\File::whereIn('folder_id', $allFolderIds)->sum('ukuran_file');
+    }
+
+    public function getDivisionLogs(Request $request)
+    {
+        $user = Auth::user();
+
+        // The route middleware already protects this, but an extra check is good.
+        if ($user->role->name !== 'admin_devisi' && $user->role->name !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $query = ActivityLog::with('user:id,name');
+
+        if ($user->role->name === 'admin_devisi') {
+            $query->where('division_id', $user->division_id);
+        }
+        // For super_admin, if division_id is provided, filter by it.
+        elseif ($user->role->name === 'super_admin' && $request->has('division_id')) {
+            $query->where('division_id', $request->input('division_id'));
+        }
+        // If super_admin and no division_id, it will fetch all logs.
+
+        $logs = $query->latest()->paginate(20);
+
+        // We need to transform the output to match what the frontend expects.
+        // The frontend expects: causer.name, description, properties.details
+        // Our model provides: user.name, action, details
+        $transformedLogs = $logs->getCollection()->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'causer' => $log->user, // The frontend wants a 'causer' object with a 'name' property. $log->user should work.
+                'description' => $log->action, // We'll map 'action' to 'description'.
+                'properties' => ['details' => $log->details], // We'll wrap 'details' inside a 'properties' object.
+                'created_at' => $log->created_at->toIso8601String(),
+                'updated_at' => $log->updated_at->toIso8601String(),
+            ];
+        });
+
+        // Create a new paginator instance with the transformed items.
+        $paginatedResult = new \Illuminate\Pagination\LengthAwarePaginator(
+            $transformedLogs,
+            $logs->total(),
+            $logs->perPage(),
+            $logs->currentPage(),
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return response()->json($paginatedResult);
     }
 }

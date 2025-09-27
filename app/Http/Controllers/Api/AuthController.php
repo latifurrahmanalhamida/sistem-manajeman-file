@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 
+// --- TAMBAHKAN IMPORT INI ---
+use Illuminate\Auth\Events\Logout;
+// -----------------------------
+
 class AuthController extends Controller
 {
     /**
@@ -73,10 +77,16 @@ class AuthController extends Controller
 
     /**
      * Menangani permintaan logout user.
+     * --- FUNGSI INI TELAH DIPERBAIKI ---
      */
     public function logout(Request $request)
     {
+        // Panggil event Logout secara manual sebelum token dihapus
+        event(new Logout('sanctum', $request->user()));
+
+        // Hapus token otentikasi
         $request->user()->currentAccessToken()->delete();
+        
         return response()->json(['message' => 'Logout berhasil.']);
     }
 }

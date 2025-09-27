@@ -21,6 +21,7 @@ class UserObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Membuat Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -31,28 +32,59 @@ class UserObserver
         ]);
     }
 
-    /**
-     * Handle the User "updated" event.
-     * --- FINAL FIX: skip log update jika ada perubahan deleted_at ---
-     */
     public function updated(User $user): void
     {
-        $changes = array_keys($user->getChanges());
+        // Ambil semua perubahan
+        $changes = $user->getChanges();
 
-        // Jika perubahan menyentuh deleted_at (restore/soft delete),
-        // jangan buat log update supaya tidak ganda.
-        if (in_array('deleted_at', $changes)) {
+        // Abaikan jika hanya 'updated_at' atau 'deleted_at' yang berubah
+        unset($changes['updated_at']);
+        if (empty($changes) || array_key_exists('deleted_at', $changes)) {
+            return;
+        }
+
+        $details = [];
+        // Peta untuk menerjemahkan nama kolom menjadi lebih ramah pengguna
+        $fieldMap = [
+            'name' => 'Nama',
+            'email' => 'Email',
+            'nipp' => 'NIPP',
+            'role_id' => 'Peran',
+        ];
+
+        foreach ($changes as $field => $newValue) {
+            $oldValue = $user->getOriginal($field);
+            $fieldName = $fieldMap[$field] ?? ucfirst($field);
+
+            // Perlakuan khusus untuk password agar tidak terekspos
+            if ($field === 'password') {
+                $details[] = "Password telah diubah";
+                continue;
+            }
+            
+            // Perlakuan khusus untuk 'role_id' untuk menampilkan nama peran
+            if ($field === 'role_id') {
+                $oldRole = \App\Models\Role::find($oldValue)->name ?? 'N/A';
+                $newRole = \App\Models\Role::find($newValue)->name ?? 'N/A';
+                $details[] = "Peran diubah dari '{$oldRole}' menjadi '{$newRole}'";
+                continue;
+            }
+
+            $details[] = "{$fieldName} diubah dari '{$oldValue}' menjadi '{$newValue}'";
+        }
+        
+        // Hanya buat log jika ada detail perubahan yang valid
+        if (empty($details)) {
             return;
         }
 
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Mengubah Data Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
-            'details'     => [
-                'info' => "Data untuk pengguna '{$user->name}' telah diperbarui."
-            ],
+            'details'     => ['info' => implode('. ', $details) . '.'],
             'status'      => 'Berhasil',
         ]);
     }
@@ -68,6 +100,7 @@ class UserObserver
 
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Menghapus Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -85,6 +118,7 @@ class UserObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Memulihkan Pengguna',
             'target_type' => get_class($user),
             'target_id'   => $user->id,
@@ -102,6 +136,7 @@ class UserObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id() ?? 0,
+            'division_id' => $user->division_id,
             'action'      => 'Menghapus Pengguna Permanen',
             'target_type' => get_class($user),
             'target_id'   => $user->id,

@@ -18,12 +18,33 @@ class FolderObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Membuat Folder',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
             'details'     => ['info' => "Folder '{$folder->name}' berhasil dibuat."],
             'status'      => 'Berhasil',
         ]);
+    }
+
+    /**
+     * --- FUNGSI BARU UNTUK RENAME ---
+     * Menangani event "updated" pada model.
+     */
+    public function updated(Folder $folder): void
+    {
+        // Hanya catat log jika kolom 'name' yang berubah.
+        if ($folder->isDirty('name')) {
+            ActivityLog::create([
+                'user_id'     => Auth::id(),
+                'division_id' => $folder->division_id,
+                'action'      => 'Mengubah Nama Folder',
+                'target_type' => get_class($folder),
+                'target_id'   => $folder->id,
+                'details'     => ['info' => "Nama folder diubah dari '{$folder->getOriginal('name')}' menjadi '{$folder->name}'."],
+                'status'      => 'Berhasil',
+            ]);
+        }
     }
 
     public function deleted(Folder $folder): void
@@ -34,6 +55,7 @@ class FolderObserver
 
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Menghapus Folder',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
@@ -46,6 +68,7 @@ class FolderObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Memulihkan Folder',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
@@ -58,6 +81,7 @@ class FolderObserver
     {
         ActivityLog::create([
             'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
             'action'      => 'Menghapus Folder Permanen',
             'target_type' => get_class($folder),
             'target_id'   => $folder->id,
