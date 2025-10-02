@@ -31,20 +31,20 @@ class FolderPolicy
 
     public function create(User $user): bool
     {
-        // Hanya admin_devisi (akses pembuatan folder via panel admin)
-        return $this->userHasRole($user, 'admin_devisi');
+        // [FIX] Izinkan admin_devisi DAN user_devisi untuk membuat folder.
+        return in_array($user->role->name, ['admin_devisi', 'user_devisi']);
     }
 
-    public function update(User $user, Folder $folder): bool
+
+public function update(User $user, Folder $folder): bool
     {
-        if ($this->userHasRole($user, 'admin_devisi')) {
+        // [FIX] Admin devisi boleh update semua folder di divisinya.
+        if ($user->role->name === 'admin_devisi') {
             return $user->division_id === $folder->division_id;
         }
-        // Opsi: user_devisi boleh update folder yang dia buat di divisinya (jika suatu saat dibuka akses)
-        if ($this->userHasRole($user, 'user_devisi')) {
-            return $user->division_id === $folder->division_id && $user->id === $folder->user_id;
-        }
-        return false;
+
+        // User biasa hanya boleh update folder miliknya sendiri di divisinya.
+        return $user->division_id === $folder->division_id && $user->id === $folder->user_id;
     }
 
     public function delete(User $user, Folder $folder): bool

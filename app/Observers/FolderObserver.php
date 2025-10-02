@@ -12,7 +12,7 @@ class FolderObserver
      * Menjalankan event observer setelah semua transaksi database selesai.
      * @var bool
      */
-    public $afterCommit = true;
+    // public $afterCommit = true;
 
     public function created(Folder $folder): void
     {
@@ -27,25 +27,25 @@ class FolderObserver
         ]);
     }
 
-    /**
-     * --- FUNGSI BARU UNTUK RENAME ---
-     * Menangani event "updated" pada model.
-     */
-    public function updated(Folder $folder): void
-    {
-        // Hanya catat log jika kolom 'name' yang berubah.
-        if ($folder->isDirty('name')) {
-            ActivityLog::create([
-                'user_id'     => Auth::id(),
-                'division_id' => $folder->division_id,
-                'action'      => 'Mengubah Nama Folder',
-                'target_type' => get_class($folder),
-                'target_id'   => $folder->id,
-                'details'     => ['info' => "Nama folder diubah dari '{$folder->getOriginal('name')}' menjadi '{$folder->name}'."],
-                'status'      => 'Berhasil',
-            ]);
-        }
+public function updated(Folder $folder): void
+{
+    if ($folder->wasChanged('name')) {
+        $oldName = $folder->getOriginal('name'); // harus nama lama
+        $newName = $folder->name; // nama baru
+
+        ActivityLog::create([
+            'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
+            'action'      => 'Mengubah Nama Folder',
+            'target_type' => get_class($folder),
+            'target_id'   => $folder->id,
+            'details'     => [
+                'info' => "Nama folder diubah dari '{$oldName}' menjadi '{$newName}'."
+            ],
+            'status'      => 'Berhasil',
+        ]);
     }
+}
 
     public function deleted(Folder $folder): void
     {

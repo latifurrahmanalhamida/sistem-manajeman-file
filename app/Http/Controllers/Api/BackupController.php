@@ -130,13 +130,15 @@ public function run(Request $request)
             // Spatie DbDumper biasanya autodetect port via --port flag; but setHost already supports host:port not needed
             $dumper->setPort($dbConfig['port']);
         }
-
-        // Jika kamu perlu set path ke mysqldump binary (Windows), set ini dari .env
         if (!empty(env('MYSQL_DUMP_PATH'))) {
             // pastikan path berakhir dengan slash
             $dumpPath = rtrim(env('MYSQL_DUMP_PATH'), '/\\') . DIRECTORY_SEPARATOR;
             $dumper->setDumpBinaryPath($dumpPath);
         }
+        // if (!empty(env('DB_DUMP_PATH'))) {
+        //     $dumpPath = rtrim(env('DB_DUMP_PATH'), '/\\') . DIRECTORY_SEPARATOR;
+        //     $dumper->setDumpBinaryPath($dumpPath);
+        // }
 
         $dumper->dumpToFile($dbDumpFile);
 

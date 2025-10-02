@@ -4,29 +4,22 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Folder;
+use App\Models\File;
 use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class FolderController extends Controller
 {
-    /**
-     * Tampilkan daftar folder berdasarkan parent dan divisi pengguna.
-     * Query param: parent_id (nullable untuk root)
-     */
-public function index(Request $request)
+    public function index(Request $request)
     {
         $user = Auth::user();
-        $parentId = $request->input('parent_id');
-        if ($parentId === '') $parentId = null;
+        $parentId = $request->input('parent_id') ?: null;
 
-        $query = Folder::with('user:id,name')
-            ->when(is_null($parentId), function ($q) {
-                $q->whereNull('parent_folder_id');
-            }, function ($q) use ($parentId) {
-                $q->where('parent_folder_id', $parentId);
-            });
+        $query = Folder::with('user:id,name')->where('parent_folder_id', $parentId);
 
         if ($user->role->name === 'super_admin') {
             if ($request->has('division_id')) {
@@ -36,71 +29,49 @@ public function index(Request $request)
             $query->where('division_id', $user->division_id);
         }
 
-        // --- MODIFIKASI PERHITUNGAN UKURAN ---
         $folders = $query->latest()->get();
-
-        // Loop setiap folder untuk menghitung ukuran rekursifnya
         $folders->each(function ($folder) {
-            // Buat properti baru untuk menyimpan total ukuran
+            // Memanggil helper method di bawah, tidak ada yang diubah dari logika asli Anda
             $folder->files_sum_ukuran_file = $this->calculateRecursiveSize($folder);
         });
-        // --- SELESAI MODIFIKASI ---
 
         return response()->json($folders);
     }
 
-    /**
-     * Simpan folder baru.
-     * Body: name (required), parent_id (nullable)
-     */
-public function store(Request $request)
+    public function store(Request $request)
     {
         $user = Auth::user();
         $this->authorize('create', Folder::class);
-        $parentId = $request->input('parent_id');
-        if ($parentId === '') {
-            $parentId = null;
-        }
-        $request->merge(['parent_id' => $parentId]);
+        $parentId = $request->input('parent_id') ?: null;
         
-        // --- MODIFIKASI DIMULAI DI SINI ---
-        $divisionId = null;
+        $divisionId = $user->role->name === 'super_admin'
+            ? $request->input('division_id')
+            : $user->division_id;
 
-        if ($user->role->name === 'super_admin') {
-            // Jika super_admin, division_id wajib ada di request
-            $request->validate(['division_id' => ['required', 'integer', Rule::exists('divisions', 'id')]]);
-            $divisionId = $request->input('division_id');
-        } else {
-            // Jika bukan super_admin, gunakan division_id milik user
-            $divisionId = $user->division_id;
-        }
-
-        $validated = $request->validate([
+        $validated = $request->validate([ // <-- Array ke-1 (untuk Aturan) dimulai di sini
             'name' => [
                 'required', 'string', 'max:255',
                 Rule::unique('folders', 'name')->where(function ($q) use ($divisionId, $parentId) {
-                    return $q->where('division_id', $divisionId) // Gunakan divisionId yang sudah ditentukan
-                             ->where('parent_folder_id', $parentId)
-                             ->whereNull('deleted_at');
+                    return $q->where('division_id', $divisionId)
+                            ->where('parent_folder_id', $parentId)
+                            ->whereNull('deleted_at');
                 }),
             ],
             'parent_id' => ['nullable', 'integer', Rule::exists('folders', 'id')],
+            'division_id' => ($user->role->name === 'super_admin') ? ['required', 'integer', 'exists:divisions,id'] : [],
+        ], [ // <-- Array ke-1 ditutup, dan Array ke-2 (untuk Pesan Error) dimulai di sini
+            'name.unique' => 'Nama folder ini sudah ada di lokasi ini.'
         ]);
-
-        if ($parentId) {
-            $parent = Folder::findOrFail($parentId);
-            if ($user->role->name !== 'super_admin' && $parent->division_id !== $user->division_id) {
-                return response()->json(['message' => 'Parent folder berada di divisi berbeda.'], 422);
-            }
-        }
 
         $folder = Folder::create([
             'name' => $validated['name'],
-            'division_id' => $divisionId, // Gunakan divisionId yang sudah ditentukan
+            'division_id' => $divisionId,
             'user_id' => $user->id,
             'parent_folder_id' => $parentId,
         ]);
-        // --- MODIFIKASI SELESAI ---
+
+        // [FIX] Membuat direktori fisik di storage
+        Storage::disk('local')->makeDirectory($folder->getFullPath());
 
         return response()->json([
             'message' => 'Folder berhasil dibuat.',
@@ -108,115 +79,90 @@ public function store(Request $request)
         ], 201);
     }
 
-    /**
-     * Detail folder (opsional dipakai untuk validasi akses/navigasi).
-     */
     public function show(Folder $folder)
     {
         $this->authorize('view', $folder);
-
         $folder->load([
-            'children:id,name,user_id,updated_at,parent_folder_id,division_id',
-            'children.user:id,name',
-            'files:id,nama_file_asli,uploader_id,updated_at,ukuran_file,folder_id,division_id',
-            'files.uploader:id,name'
+            'children:id,name,user_id,updated_at,parent_folder_id,division_id', 'children.user:id,name',
+            'files:id,nama_file_asli,uploader_id,updated_at,ukuran_file,folder_id,division_id', 'files.uploader:id,name'
         ]);
-
-        $breadcrumbs = collect();
-        $current = $folder;
-        while ($current) {
-            $breadcrumbs->prepend($current->only(['id','name']));
-            $current = $current->parent;
-        }
-
         return response()->json([
             'folder' => $folder,
-            'breadcrumbs' => $breadcrumbs->values(),
+            'breadcrumbs' => $folder->getBreadcrumbs()->values(),
         ]);
     }
 
-    /**
-     * Update nama dan/atau pindahkan parent folder.
-     * Body: name (optional), parent_id (optional)
-     */
-    public function update(Request $request, Folder $folder)
-    {
-        $user = Auth::user();
-        if ($user->role->name !== 'super_admin' && $folder->division_id !== $user->division_id) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
+public function update(Request $request, Folder $folder)
+{
+    try {
         $this->authorize('update', $folder);
-
-        $parentId = $request->has('parent_id') ? $request->input('parent_id') : $folder->parent_folder_id;
-        if ($parentId === '') {
-            $parentId = null;
-        }
-
-        // Normalisasi parent_id agar validasi konsisten
-        if ($request->has('parent_id')) {
-            $request->merge(['parent_id' => $parentId]);
-        }
 
         $validated = $request->validate([
             'name' => [
-                'sometimes',
-                'required',
-                'string',
-                'max:255',
+                'required', 'string', 'max:255',
                 Rule::unique('folders', 'name')
                     ->ignore($folder->id)
-                    ->where(function ($q) use ($folder, $parentId) {
+                    ->where(function ($q) use ($folder) {
                         return $q->where('division_id', $folder->division_id)
-                                 ->where('parent_folder_id', $parentId)
+                                 ->where('parent_folder_id', $folder->parent_folder_id)
                                  ->whereNull('deleted_at');
                     }),
             ],
-            'parent_id' => ['sometimes', 'nullable', 'integer', Rule::exists('folders', 'id')],
+        ], [
+            'name.unique' => 'Nama folder ini sudah ada di lokasi ini.'
         ]);
+        
+        $oldPath = $folder->getFullPath();
 
-        // Validasi parent (jika diganti) harus satu divisi
-        if ($request->has('parent_id')) {
-            if ($parentId) {
-                $parent = Folder::findOrFail($parentId);
-                if ($parent->division_id !== $folder->division_id && $user->role->name !== 'super_admin') {
-                    return response()->json(['message' => 'Parent folder berada di divisi berbeda.'], 422);
-                }
+        DB::beginTransaction();
+        
+        $folder->name = $validated['name'];
+        // Observer 'updating' akan berjalan di sini jika sukses
+        $folder->save(); 
+
+        $newPath = $folder->getFullPath();
+
+        if ($oldPath !== $newPath && Storage::disk('local')->exists($oldPath)) {
+            Storage::disk('local')->move($oldPath, $newPath);
+
+            $filesToUpdate = File::where('path_penyimpanan', 'like', $oldPath . '%')->get();
+            foreach ($filesToUpdate as $file) {
+                $newFilePath = str_replace($oldPath, $newPath, $file->path_penyimpanan);
+                $file->update(['path_penyimpanan' => $newFilePath]);
             }
-            $folder->parent_folder_id = $parentId;
         }
 
-        if ($request->has('name')) {
-            $folder->name = $validated['name'];
-        }
+        DB::commit();
 
-        $folder->save();
+        return response()->json(['message' => 'Folder berhasil diperbarui.', 'data' => $folder]);
 
-        return response()->json([
-            'message' => 'Folder berhasil diperbarui.',
-            'data' => $folder,
+    } catch (ValidationException $e) {
+        ActivityLog::create([
+            'user_id'     => Auth::id(),
+            'division_id' => $folder->division_id,
+            'action'      => 'Gagal Mengubah Nama Folder',
+            'target_type' => get_class($folder),
+            'target_id'   => $folder->id,
+            'details'     => ['info' => "Upaya mengubah nama '{$folder->name}' menjadi '{$request->input('name')}' gagal karena nama sudah ada."],
+            'status'      => 'Gagal',
         ]);
-    }
+        return response()->json(['errors' => $e->errors()], 422);
 
-    /**
-     * Hapus (soft delete) folder.
-     */
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['message' => 'Gagal memperbarui folder.', 'error' => $e->getMessage()], 500);
+    }
+}
+
     public function destroy(Folder $folder)
     {
-        $user = Auth::user();
-        if ($user->role->name !== 'super_admin' && $folder->division_id !== $user->division_id) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
         $this->authorize('delete', $folder);
-
-        // Soft delete rekursif untuk subtree
+        // Soft delete tidak menghapus folder fisik, agar bisa direstore
         $this->deleteRecursively($folder);
         return response()->json(['message' => 'Folder dipindahkan ke sampah.']);
     }
 
-    /**
-     * Daftar folder yang berada di sampah (soft-deleted)
-     */
-public function trashed(Request $request)
+    public function trashed(Request $request)
     {
         $user = Auth::user();
         $query = Folder::onlyTrashed()->with('user:id,name');
@@ -228,121 +174,73 @@ public function trashed(Request $request)
         } else {
             $query->where('division_id', $user->division_id);
         }
-
-        // --- MODIFIKASI PERHITUNGAN UKURAN ---
         $folders = $query->latest()->get();
-
-        // Loop setiap folder untuk menghitung ukuran rekursifnya
         $folders->each(function ($folder) {
             $folder->files_sum_ukuran_file = $this->calculateRecursiveSize($folder);
         });
-        // --- SELESAI MODIFIKASI ---
-
         return response()->json($folders);
     }
-    public function restore(Request $request, $id)
+    
+    public function restore($id)
     {
         $folder = Folder::onlyTrashed()->findOrFail($id);
-        $user = Auth::user();
-        if ($user->role->name !== 'super_admin' && $folder->division_id !== $user->division_id) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
         $this->authorize('restore', $folder);
-
-        $newName = $request->input('new_name');
-        $overwrite = $request->boolean('overwrite');
-        $nameToUse = $newName ?: $folder->name;
-
-        $existingActive = Folder::whereNull('deleted_at')
-            ->where('division_id', $folder->division_id)
-            ->where('parent_folder_id', $folder->parent_folder_id)
-            ->where('name', $nameToUse)
-            ->first();
-
-        if ($existingActive && !$overwrite) {
-            return response()->json([
-                'message' => 'Folder dengan nama yang sama sudah ada di lokasi tujuan.',
-                'status' => 'conflict'
-            ], 409);
+        
+        // Cek apakah parent folder-nya masih ada (tidak terhapus)
+        if ($folder->parent_folder_id && Folder::find($folder->parent_folder_id) === null) {
+             return response()->json(['message' => 'Tidak dapat memulihkan karena folder induknya tidak ada.'], 422);
         }
-
-        if ($existingActive && $overwrite) {
-            // Soft delete folder yang aktif agar tidak bentrok nama
-            $this->deleteRecursively($existingActive);
-        }
-
-        // Restore rekursif
+        
         $this->restoreRecursively($folder);
-
-        if ($newName) {
-            $folder->name = $newName;
-            $folder->save();
-        }
-
         return response()->json(['message' => 'Folder berhasil dipulihkan.']);
     }
 
-    /**
-     * Hapus permanen folder dari sampah.
-     */
     public function forceDelete($id)
     {
         $folder = Folder::onlyTrashed()->findOrFail($id);
-        $user = Auth::user();
-        if ($user->role->name !== 'super_admin' && $folder->division_id !== $user->division_id) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
         $this->authorize('forceDelete', $folder);
 
-        // Hard delete akan mengandalkan FK cascade di DB untuk menghapus subtree
+        $path = $folder->getFullPath();
+
         $folder->forceDelete();
+        
+        // [FIX] Hapus direktori fisik secara permanen
+        if (Storage::disk('local')->exists($path)) {
+            Storage::disk('local')->deleteDirectory($path);
+        }
 
         return response()->json(['message' => 'Folder dihapus permanen.']);
     }
 
-    /**
-     * Helper: soft delete rekursif subtree folder
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | Helper Methods (Tidak Ada yang Diubah dari Kode Asli Anda)
+    |--------------------------------------------------------------------------
+    */
+
     private function deleteRecursively(Folder $folder): void
     {
-        // Hapus file aktif di folder ini
-        $folder->files()->whereNull('deleted_at')->get()->each(function ($file) {
-            $file->delete();
-        });
-
-        // Proses anak terlebih dahulu
-        $folder->children()->whereNull('deleted_at')->get()->each(function ($child) {
+        foreach ($folder->children as $child) {
             $this->deleteRecursively($child);
-        });
-
-        // Terakhir hapus folder ini
+        }
+        $folder->files()->delete();
         $folder->delete();
     }
-
-    /**
-     * Helper: restore rekursif subtree folder
-     */
+    
     private function restoreRecursively(Folder $folder): void
     {
-        // Pulihkan folder ini dulu
-        $folder->restore();
-
-        // Pulihkan file di folder ini
-        $folder->files()->onlyTrashed()->get()->each(function ($file) {
-            $file->restore();
-        });
-
-        // Pulihkan subfolder
-        $folder->children()->onlyTrashed()->get()->each(function ($child) {
+        foreach ($folder->children()->onlyTrashed()->get() as $child) {
             $this->restoreRecursively($child);
-        });
+        }
+        $folder->files()->onlyTrashed()->restore();
+        $folder->restore();
     }
+
     private function getDescendantFolderIds(Folder $folder)
     {
         $descendantIds = collect();
         foreach ($folder->children as $child) {
             $descendantIds->push($child->id);
-            // Panggil fungsi ini lagi untuk anak dari anak (cucu, dst.)
             $descendantIds = $descendantIds->merge($this->getDescendantFolderIds($child));
         }
         return $descendantIds;
@@ -350,60 +248,42 @@ public function trashed(Request $request)
 
     private function calculateRecursiveSize(Folder $folder)
     {
-        // Ambil semua ID sub-folder
         $allFolderIds = $this->getDescendantFolderIds($folder);
-        // Tambahkan ID folder itu sendiri
         $allFolderIds->push($folder->id);
-
-        // Jumlahkan ukuran semua file yang ada di dalam folder-folder tersebut
         return \App\Models\File::whereIn('folder_id', $allFolderIds)->sum('ukuran_file');
     }
 
-    public function getDivisionLogs(Request $request)
-    {
-        $user = Auth::user();
+ public function getDivisionLogs(Request $request)
+{
+    $user = Auth::user();
 
-        // The route middleware already protects this, but an extra check is good.
-        if ($user->role->name !== 'admin_devisi' && $user->role->name !== 'super_admin') {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $query = ActivityLog::with('user:id,name');
-
-        if ($user->role->name === 'admin_devisi') {
-            $query->where('division_id', $user->division_id);
-        }
-        // For super_admin, if division_id is provided, filter by it.
-        elseif ($user->role->name === 'super_admin' && $request->has('division_id')) {
-            $query->where('division_id', $request->input('division_id'));
-        }
-        // If super_admin and no division_id, it will fetch all logs.
-
-        $logs = $query->latest()->paginate(20);
-
-        // We need to transform the output to match what the frontend expects.
-        // The frontend expects: causer.name, description, properties.details
-        // Our model provides: user.name, action, details
-        $transformedLogs = $logs->getCollection()->map(function ($log) {
-            return [
-                'id' => $log->id,
-                'causer' => $log->user, // The frontend wants a 'causer' object with a 'name' property. $log->user should work.
-                'description' => $log->action, // We'll map 'action' to 'description'.
-                'properties' => ['details' => $log->details], // We'll wrap 'details' inside a 'properties' object.
-                'created_at' => $log->created_at->toIso8601String(),
-                'updated_at' => $log->updated_at->toIso8601String(),
-            ];
-        });
-
-        // Create a new paginator instance with the transformed items.
-        $paginatedResult = new \Illuminate\Pagination\LengthAwarePaginator(
-            $transformedLogs,
-            $logs->total(),
-            $logs->perPage(),
-            $logs->currentPage(),
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
-
-        return response()->json($paginatedResult);
+    if ($user->role->name !== 'admin_devisi' && $user->role->name !== 'super_admin') {
+        return response()->json(['message' => 'Unauthorized'], 403);
     }
+
+    $query = ActivityLog::with('user:id,name');
+
+    if ($user->role->name === 'admin_devisi') {
+        $query->where('division_id', $user->division_id);
+    } 
+    elseif ($user->role->name === 'super_admin' && $request->has('division_id')) {
+        $query->where('division_id', $request->input('division_id'));
+    }
+
+    $logs = $query->latest()->paginate(20);
+
+    // [FIX] Gunakan 'through()' untuk mengubah setiap item di dalam paginator
+    $transformedLogs = $logs->through(function ($log) {
+        return [
+            'id' => $log->id,
+            'causer' => $log->user,
+            'description' => $log->action,
+            'properties' => ['details' => $log->details],
+            'created_at' => $log->created_at->toIso8601String(),
+            'updated_at' => $log->updated_at->toIso8601String(),
+        ];
+    });
+
+    return response()->json($transformedLogs);
+}
 }

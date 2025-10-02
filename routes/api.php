@@ -40,26 +40,27 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/force', [FileController::class, 'forceDelete']);
     });
 
-    // --- BACKUP ---
-    Route::prefix('backup')->group(function () {
-        Route::post('/backup', [BackupController::class, 'backupAll']);         // Full backup
-        Route::post('/database', [BackupController::class, 'backupDatabase']);  // Database only
-        Route::post('/storage', [BackupController::class, 'backupStorage']);    // Files only
-        Route::get('/list', [BackupController::class, 'listBackups']);          // List backups
-        Route::delete('/delete/{filename}', [BackupController::class, 'deleteBackup']);
-        Route::get('/download/{filename}', [BackupController::class, 'downloadBackup']);
-        Route::post('/users', [BackupController::class, 'backupUsersTable']);
-    });
 
-   Route::prefix('backup')->group(function () {
+Route::prefix('backups')->group(function () {
+    // GET /api/backups -> Menampilkan semua backup
+    Route::get('/', [BackupController::class, 'index']);
+    
+    // POST /api/backups/run -> Menjalankan backup manual
     Route::post('/run', [BackupController::class, 'run']);
-    Route::get('/list', [BackupController::class, 'index']);
+    
+    // Rute untuk settings
     Route::get('/settings', [BackupController::class, 'getSettings']);
     Route::post('/settings', [BackupController::class, 'updateSettings']);
+    
+    // Rute untuk schedule
     Route::get('/schedule', [BackupController::class, 'getSchedule']);
     Route::post('/schedule', [BackupController::class, 'updateSchedule']);
-    Route::get('download/{id}', [BackupController::class, 'download']);
-    Route::delete('{id}', [BackupController::class, 'destroy']);     
+    
+    // GET /api/backups/{backup}/download -> Download backup spesifik
+    Route::get('/{backup}/download', [BackupController::class, 'download']);
+    
+    // DELETE /api/backups/{backup} -> Hapus backup spesifik
+    Route::delete('/{backup}', [BackupController::class, 'destroy']);      
 });
 
     // --- GRUP RUTE ADMIN (/api/admin/...) ---

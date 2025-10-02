@@ -17,10 +17,14 @@ class UserObserver
     /**
      * Handle the User "created" event.
      */
-    public function created(User $user): void
+        public function created(User $user): void
     {
+        if (app()->runningInConsole()) {
+            return;
+        }
+
         ActivityLog::create([
-            'user_id'     => Auth::id() ?? 0,
+            'user_id'     => Auth::id(),
             'division_id' => $user->division_id,
             'action'      => 'Membuat Pengguna',
             'target_type' => get_class($user),
@@ -32,8 +36,12 @@ class UserObserver
         ]);
     }
 
-    public function updated(User $user): void
+        public function updated(User $user): void
     {
+        if (app()->runningInConsole()) {
+            return;
+        }
+
         // Ambil semua perubahan
         $changes = $user->getChanges();
 
@@ -79,7 +87,7 @@ class UserObserver
         }
 
         ActivityLog::create([
-            'user_id'     => Auth::id() ?? 0,
+            'user_id'     => Auth::id(),
             'division_id' => $user->division_id,
             'action'      => 'Mengubah Data Pengguna',
             'target_type' => get_class($user),
@@ -92,14 +100,18 @@ class UserObserver
     /**
      * Handle the User "deleted" event (Soft Delete).
      */
-    public function deleted(User $user): void
+        public function deleted(User $user): void
     {
+        if (app()->runningInConsole()) {
+            return;
+        }
+
         if ($user->isForceDeleting()) {
             return;
         }
 
         ActivityLog::create([
-            'user_id'     => Auth::id() ?? 0,
+            'user_id'     => Auth::id(),
             'division_id' => $user->division_id,
             'action'      => 'Menghapus Pengguna',
             'target_type' => get_class($user),
@@ -114,10 +126,14 @@ class UserObserver
     /**
      * Handle the User "restored" event.
      */
-    public function restored(User $user): void
+        public function restored(User $user): void
     {
+        if (app()->runningInConsole()) {
+            return;
+        }
+
         ActivityLog::create([
-            'user_id'     => Auth::id() ?? 0,
+            'user_id'     => Auth::id(),
             'division_id' => $user->division_id,
             'action'      => 'Memulihkan Pengguna',
             'target_type' => get_class($user),
@@ -132,10 +148,14 @@ class UserObserver
     /**
      * Handle the User "force deleted" event.
      */
-    public function forceDeleted(User $user): void
+        public function forceDeleted(User $user): void
     {
+        if (app()->runningInConsole()) {
+            return;
+        }
+
         ActivityLog::create([
-            'user_id'     => Auth::id() ?? 0,
+            'user_id'     => Auth::id(),
             'division_id' => $user->division_id,
             'action'      => 'Menghapus Pengguna Permanen',
             'target_type' => get_class($user),

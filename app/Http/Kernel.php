@@ -76,9 +76,6 @@ class Kernel extends HttpKernel
         'check.role' => \App\Http\Middleware\CheckRole::class,
     ];
 
-    protected $commands = [
-        \App\Console\Commands\BackupSystem::class,
-    ];
-
+    
 
 }

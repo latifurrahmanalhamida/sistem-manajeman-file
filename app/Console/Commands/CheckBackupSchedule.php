@@ -24,7 +24,7 @@ class CheckBackupSchedule extends Command
         }
 
         $now = Carbon::now();
-        $currentTime = $now->format('H:i');
+        $currentTime = $now->format('H:i:00');
 
         $shouldRun = false;
 

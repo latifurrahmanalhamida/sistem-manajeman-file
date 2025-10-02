@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Str;
 
 class FileController extends Controller
 {
@@ -167,14 +168,19 @@ public function store(Request $request)
         $existingFile->forceDelete();
     }
 
+    // Tentukan path penyimpanan
+    $uploadPath = 'uploads/' . Str::slug($division->name, '-');
     if ($folderId) {
-        $folder = Folder::find($folderId);
+        $folder = Folder::with('division', 'parent')->find($folderId);
         if ($folder && $folder->division_id != $divisionId) {
             return response()->json(['message' => 'Folder tujuan tidak cocok dengan divisi yang dipilih.'], 422);
         }
+        if ($folder) {
+            $uploadPath = $folder->getFullPath();
+        }
     }
 
-    $path = $uploadedFile->store('uploads/' . $divisionId);
+    $path = $uploadedFile->store($uploadPath);
 
     $newFile = File::create([
         'nama_file_asli' => $fileNameToSave,

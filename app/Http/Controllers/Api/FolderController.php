@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Folder;
+use App\Models\File;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class FolderController extends Controller
 {
@@ -54,6 +56,10 @@ class FolderController extends Controller
             'parent_folder_id' => $validated['parent_folder_id'] ?? null,
         ]);
 
+        // Buat direktori fisik
+        $folder->loadMissing('division', 'parent');
+        Storage::makeDirectory($folder->getFullPath());
+
         return response()->json($folder, 201);
     }
 
@@ -88,7 +94,39 @@ class FolderController extends Controller
             ],
         ]);
 
-        $folder->update(['name' => $validated['name']]);
+        $folder->loadMissing('division', 'parent');
+        $oldPath = $folder->getFullPath();
+
+        // Find all files that need updating BEFORE the name is changed
+        $files = File::where('path_penyimpanan', 'like', $oldPath . '%')->get();
+
+        DB::beginTransaction();
+        try {
+            // 1. Update folder name in DB
+            $folder->update(['name' => $validated['name']]);
+
+            // 2. Get the new path
+            $newPath = $folder->getFullPath();
+
+            // 3. Move the physical directory
+            Storage::move($oldPath, $newPath);
+
+            // 4. Update file paths in DB
+            foreach ($files as $file) {
+                $newFilePath = str_replace($oldPath, $newPath, $file->path_penyimpanan);
+                $file->update(['path_penyimpanan' => $newFilePath]);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            // If anything fails, move the directory back
+            if (Storage::exists($newPath)) {
+                Storage::move($newPath, $oldPath);
+            }
+            return response()->json(['message' => 'Gagal mengubah nama folder, terjadi kesalahan.', 'error' => $e->getMessage()], 500);
+        }
+
         return response()->json($folder);
     }
 
@@ -103,7 +141,15 @@ class FolderController extends Controller
             return response()->json(['message' => 'Folder tidak dapat dihapus karena tidak kosong.'], 409);
         }
 
+        // Get the path before deleting the record
+        $folder->loadMissing('division', 'parent');
+        $path = $folder->getFullPath();
+
         $folder->delete();
+
+        // Delete the physical directory
+        Storage::deleteDirectory($path);
+
         return response()->json(null, 204);
     }
 }
