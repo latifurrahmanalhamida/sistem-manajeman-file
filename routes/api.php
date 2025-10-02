@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/files/recent', [FileController::class, 'recent']);
     Route::get('/files/favorites', [FileController::class, 'favorites']);
     Route::get('/files/trashed', [FileController::class, 'trashed']);
+    Route::get('/files/all', [FileController::class, 'allFiles']);
 
     Route::prefix('files/{fileId}')->group(function () {
         Route::put('/rename', [FileController::class, 'rename']);
