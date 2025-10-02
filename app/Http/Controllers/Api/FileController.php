@@ -202,6 +202,18 @@ public function store(Request $request)
         return $query->latest()->get();
     }
 
+    public function allFiles()
+    {
+        $user = Auth::user();
+        $query = File::with('uploader:id,name', 'division:id,name');
+
+        if ($user->role->name !== 'super_admin') {
+            $query->where('division_id', $user->division_id);
+        }
+
+        return $query->latest()->get();
+    }
+
     public function favorites()
     {
         $user = Auth::user();
